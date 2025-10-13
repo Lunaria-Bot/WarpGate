@@ -1,5 +1,5 @@
 # config.py
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings  # ✅ nouveau import
 
 class Settings(BaseSettings):
     DISCORD_TOKEN: str
