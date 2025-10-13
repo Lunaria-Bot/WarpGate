@@ -15,8 +15,8 @@ def pool():
 @asynccontextmanager
 async def tx():
     conn = await _pool.acquire()
+    tr = conn.transaction()
     try:
-        tr = conn.transaction()
         await tr.start()
         yield conn
         await tr.commit()
