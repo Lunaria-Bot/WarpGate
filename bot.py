@@ -16,7 +16,17 @@ async def on_ready():
 async def main():
     await init_db()
     await init_redis()
-    for ext in ["cogs.register", "cogs.draw", "cogs.profile"]:
+    for ext in [
+    "cogs.register",
+    "cogs.draw",
+    "cogs.profile",
+    "cogs.wallet",
+    "cogs.inventory",
+    "cogs.faction",
+    "cogs.trade"
+]:
+    await bot.load_extension(ext)
+
         await bot.load_extension(ext)
     await bot.start(settings.DISCORD_TOKEN)
 
