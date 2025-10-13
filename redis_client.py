@@ -1,9 +1,13 @@
 # redis_client.py
-import aioredis
+import redis.asyncio as redis
 from config import settings
 
-redis = None
+redis_client = None
 
 async def init_redis():
-    global redis
-    redis = aioredis.from_url(settings.REDIS_URL, encoding="utf-8", decode_responses=True)
+    global redis_client
+    redis_client = redis.from_url(
+        settings.REDIS_URL,
+        encoding="utf-8",
+        decode_responses=True
+    )
