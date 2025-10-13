@@ -1,4 +1,4 @@
 discord.py
 asyncpg
-aioredis
+redis
 pydantic-settings
