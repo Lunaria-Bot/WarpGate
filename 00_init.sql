@@ -1,4 +1,4 @@
--- 00_init.sql
+-- sql/00_init.sql
 CREATE TABLE IF NOT EXISTS users (
     user_id BIGINT PRIMARY KEY,
     username TEXT NOT NULL,
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS cards (
     name TEXT NOT NULL,
     rarity TEXT NOT NULL CHECK (rarity IN ('COMMON','RARE','EPIC','LEGENDARY')),
     faction_id TEXT,
-    drop_weight INT NOT NULL DEFAULT 1, -- pour le tirage pondéré
+    drop_weight INT NOT NULL DEFAULT 1,
     metadata JSONB NOT NULL DEFAULT '{}'
 );
 
@@ -46,26 +46,9 @@ CREATE TABLE IF NOT EXISTS user_cards (
     PRIMARY KEY (user_id, card_id)
 );
 
-CREATE TABLE IF NOT EXISTS trades (
-    trade_id BIGSERIAL PRIMARY KEY,
-    initiator_id BIGINT NOT NULL,
-    recipient_id BIGINT NOT NULL,
-    status TEXT NOT NULL CHECK (status IN ('OPEN','CONFIRMED_INITIATOR','CONFIRMED_RECIPIENT','COMPLETED','CANCELLED')),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS trade_items (
-    trade_id BIGINT REFERENCES trades(trade_id) ON DELETE CASCADE,
-    user_id BIGINT NOT NULL,
-    item_type TEXT NOT NULL CHECK (item_type IN ('CARD','BLOOD_COINS','NOBLE_COINS')),
-    card_id TEXT,
-    amount BIGINT,
-    PRIMARY KEY (trade_id, user_id, item_type, COALESCE(card_id,''))
-);
-
--- Seed minimal
+-- Seeds
 INSERT INTO factions (faction_id, name, description) VALUES
-    ('ASHEN','Ashen Order','Guerriers austères'), 
+    ('ASHEN','Ashen Order','Guerriers austères'),
     ('VERDANT','Verdant Pact','Protecteurs de la nature'),
     ('AZURE','Azure Syndicate','Mages érudits')
 ON CONFLICT DO NOTHING;
