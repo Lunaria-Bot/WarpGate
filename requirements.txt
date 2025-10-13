@@ -1,5 +1,4 @@
-# requirements.txt
 discord.py
 asyncpg
 aioredis
-pydantic
+pydantic-settings
