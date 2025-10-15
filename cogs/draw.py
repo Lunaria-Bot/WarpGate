@@ -27,7 +27,9 @@ class Draw(commands.Cog):
         # 1. Envoyer une animation GIF (toujours le même)
         anim_msg = await ctx.send(
             "🎴 Tirage en cours...",
-            file=discord.File("assets/pack_opening.gif")  # <-- mets ton GIF ici
+            embed = discord.Embed(description="🎴 Tirage en cours...")
+            embed.set_image(url="https://tonlienversungif.gif")
+            anim_msg = await ctx.send(embed=embed)
         )
 
         # 2. Attendre un petit délai (2 secondes par ex.)
