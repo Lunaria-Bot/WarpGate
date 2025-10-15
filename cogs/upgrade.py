@@ -89,13 +89,17 @@ class Upgrade(commands.Cog):
                 """, user_id, next_card["card_id"])
 
         # 6. Confirmation embed
+        potential = int(next_card["potential"]) if next_card["potential"] is not None else 0
+
         embed = discord.Embed(
             title="🔼 Upgrade Successful!",
-            description=f"{card['name']} has been upgraded to **{next_rarity.capitalize()}**!",
+            description=f"{card['name']} has been upgraded to **{next_card['name']}**!",
             color=RARITY_COLORS.get(next_rarity, discord.Color.dark_gray())
         )
         embed.add_field(name="Cost", value=f"{rule['cost']} BloodCoins", inline=True)
         embed.add_field(name="Copies Used", value=str(rule["copies"]), inline=True)
+        embed.add_field(name="New Potential", value="⭐" * potential, inline=True)
+
         if next_card["image_url"]:
             embed.set_thumbnail(url=next_card["image_url"])
 
