@@ -82,7 +82,7 @@ class QuestView(View):
                     status = progress_bar(0, q["target"])
                 reward = f"💰 {q['reward_coins']} Bloodcoins" if q.get("reward_coins") else f"🎴 {q['reward_item']}"
                 embed.add_field(name=q["desc"], value=f"Progress: {status}\nReward: {reward}", inline=False)
-        embed.set_image(url="https://i.imgur.com/8hQ6YkR.png")  # NPC art
+        embed.set_image(url="https://cdn.discordapp.com/attachments/1428075046454431784/1428075092520468620/image.png?ex=68f12e12&is=68efdc92&hm=7c4f25bc0659da9d27328a2ba810b6e5ed68395e3673eab9d1499bab32ca392f&")  # NPC art
         await interaction.response.edit_message(embed=embed, view=self)
 
 # --- Cog with resets ---
@@ -130,7 +130,7 @@ class Quests(commands.Cog):
     @commands.command(name="quest", aliases=["quests"])
     async def quest(self, ctx):
         embed = discord.Embed(title="🧙 Quest Master", description="Welcome adventurer! Choose your quests:", color=discord.Color.purple())
-        embed.set_image(url="https://i.imgur.com/8hQ6YkR.png")
+        embed.set_image(url="https://cdn.discordapp.com/attachments/1428075046454431784/1428075092520468620/image.png?ex=68f12e12&is=68efdc92&hm=7c4f25bc0659da9d27328a2ba810b6e5ed68395e3673eab9d1499bab32ca392f&")
         await ctx.send(embed=embed, view=QuestView(self.bot, ctx.author))
 
 async def setup(bot): await bot.add_cog(Quests(bot))
