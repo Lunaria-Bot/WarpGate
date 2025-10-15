@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 
-# Règles d’upgrade : coût en Bloodcoins + copies nécessaires
+# Upgrade rules: cost in Bloodcoins + copies required
 UPGRADE_RULES = {
     "common": {"next": "rare", "cost": 2000, "copies": 5},
     "rare": {"next": "epic", "cost": 5000, "copies": 20},
@@ -15,6 +15,21 @@ RARITY_COLORS = {
     "legendary": discord.Color.gold()
 }
 
+# --- Helper: update quest progress ---
+async def update_quest_progress(conn, user_id: int, quest_desc: str, amount: int = 1):
+    """Increment quest progress for a given quest description."""
+    await conn.execute("""
+        UPDATE user_quests uq
+        SET progress = progress + $3,
+            completed = (progress + $3) >= qt.target
+        FROM quest_templates qt
+        WHERE uq.quest_id = qt.quest_id
+          AND uq.user_id = $1
+          AND qt.description = $2
+          AND uq.claimed = FALSE
+    """, user_id, quest_desc, amount)
+
+
 class Upgrade(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -23,15 +38,15 @@ class Upgrade(commands.Cog):
     async def upgrade(self, ctx, *, args: str):
         """
         Upgrade a card by name and rarity.
-        Exemple: !upgrade Makima Common
+        Example: !upgrade Makima Common
                  !upgrade Maki Zenin Common
         """
         user_id = int(ctx.author.id)
 
-        # Liste des raretés valides
+        # Valid rarities
         valid_rarities = ["common", "rare", "epic", "legendary"]
 
-        # On coupe la chaîne en 2 : nom + rareté
+        # Split into card name + rarity
         parts = args.rsplit(" ", 1)
         if len(parts) != 2:
             await ctx.send("⚠️ Usage: !upgrade <card name> <rarity>")
@@ -45,7 +60,7 @@ class Upgrade(commands.Cog):
             return
 
         async with self.bot.db.acquire() as conn:
-            # 1. Vérifie le solde du joueur
+            # 1. Check user balance
             balance = await conn.fetchval(
                 "SELECT bloodcoins FROM users WHERE user_id = $1", user_id
             )
@@ -53,7 +68,7 @@ class Upgrade(commands.Cog):
                 await ctx.send("⚠️ You don't have a profile yet.")
                 return
 
-            # 2. Récupère la carte actuelle (par nom + rareté)
+            # 2. Fetch current card
             card = await conn.fetchrow("""
                 SELECT uc.quantity, c.card_id, c.name, c.rarity, c.base_name
                 FROM user_cards uc
@@ -70,7 +85,7 @@ class Upgrade(commands.Cog):
             rule = UPGRADE_RULES[rarity]
             next_rarity = rule["next"]
 
-            # 3. Vérifie les conditions
+            # 3. Check requirements
             if balance < rule["cost"]:
                 await ctx.send(f"❌ You need {rule['cost']} BloodCoins to upgrade.")
                 return
@@ -78,7 +93,7 @@ class Upgrade(commands.Cog):
                 await ctx.send(f"❌ You need {rule['copies']} copies of this card to upgrade.")
                 return
 
-            # 4. Trouve la carte de rareté supérieure
+            # 4. Fetch upgraded version
             next_card = await conn.fetchrow("""
                 SELECT card_id, name, rarity, image_url, description, potential
                 FROM cards
@@ -89,7 +104,7 @@ class Upgrade(commands.Cog):
                 await ctx.send(f"⚠️ No upgraded version found for {card['name']} → {next_rarity}.")
                 return
 
-            # 5. Transaction : retirer coins + copies, ajouter la carte supérieure
+            # 5. Transaction: remove coins + copies, add upgraded card
             async with conn.transaction():
                 await conn.execute(
                     "UPDATE users SET bloodcoins = bloodcoins - $1 WHERE user_id = $2",
@@ -106,7 +121,12 @@ class Upgrade(commands.Cog):
                     DO UPDATE SET quantity = user_cards.quantity + 1
                 """, user_id, next_card["card_id"])
 
-        # 6. Embed de confirmation
+                # ✅ Update quest progress
+                await update_quest_progress(conn, user_id, "Upgrade 1 card", 1)
+                await update_quest_progress(conn, user_id, "Upgrade 2 cards", 1)
+                await update_quest_progress(conn, user_id, "Upgrade 10 cards", 1)
+
+        # 6. Confirmation embed
         potential = int(next_card["potential"]) if next_card["potential"] is not None else 0
 
         embed = discord.Embed(
@@ -147,6 +167,5 @@ class Upgrade(commands.Cog):
         await ctx.send(embed=embed)
 
 
-# Fonction obligatoire pour charger le cog
 async def setup(bot):
     await bot.add_cog(Upgrade(bot))
