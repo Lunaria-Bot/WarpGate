@@ -1,6 +1,7 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord.ui import View, Button
+import datetime, asyncio
 
 # --- Quest Definitions ---
 DAILY_QUESTS = [
@@ -20,24 +21,8 @@ WEEKLY_QUESTS = [
 
 # --- Progress bar utility ---
 def progress_bar(progress: int, target: int, length: int = 10) -> str:
-    if target <= 0:
-        return "N/A"
     filled = int(length * min(progress, target) / target)
-    empty = length - filled
-    return f"{'▰' * filled}{'▱' * empty} {progress}/{target}"
-
-# --- Helper: update quest progress ---
-async def update_quest_progress(conn, user_id: int, quest_desc: str, amount: int = 1):
-    await conn.execute("""
-        UPDATE user_quests uq
-        SET progress = progress + $3,
-            completed = (progress + $3) >= qt.target
-        FROM quest_templates qt
-        WHERE uq.quest_id = qt.quest_id
-          AND uq.user_id = $1
-          AND qt.description = $2
-          AND uq.claimed = FALSE
-    """, user_id, quest_desc, amount)
+    return f"{'▰'*filled}{'▱'*(length-filled)} {progress}/{target}"
 
 # --- Claim Button ---
 class ClaimButton(Button):
@@ -48,16 +33,14 @@ class ClaimButton(Button):
 
     async def callback(self, interaction: discord.Interaction):
         if interaction.user != self.parent_view.author:
-            await interaction.response.send_message("⚠️ This is not your quest menu.", ephemeral=True)
+            await interaction.response.send_message("⚠️ Not your quest menu.", ephemeral=True)
             return
-
         async with self.parent_view.bot.db.acquire() as conn:
             updated = await conn.execute("""
                 UPDATE user_quests
                 SET claimed = TRUE
                 WHERE user_id = $1 AND quest_id = $2 AND completed = TRUE AND claimed = FALSE
             """, interaction.user.id, self.quest["id"])
-
             if updated == "UPDATE 1":
                 if self.quest.get("reward_coins"):
                     await conn.execute(
@@ -67,79 +50,87 @@ class ClaimButton(Button):
                     reward_text = f"💰 {self.quest['reward_coins']} Bloodcoins"
                 else:
                     reward_text = f"🎴 {self.quest['reward_item']}"
-                    # TODO: Insert logic to grant the card reward
-
-                await interaction.response.send_message(f"✅ You claimed your reward: {reward_text}", ephemeral=True)
+                await interaction.response.send_message(f"✅ You claimed: {reward_text}", ephemeral=True)
             else:
-                await interaction.response.send_message("⚠️ You cannot claim this quest yet.", ephemeral=True)
+                await interaction.response.send_message("⚠️ Cannot claim yet.", ephemeral=True)
 
 # --- Quest Menu View ---
 class QuestView(View):
     def __init__(self, bot, author):
         super().__init__(timeout=120)
-        self.bot = bot
-        self.author = author
-
+        self.bot, self.author = bot, author
         daily_btn = Button(label="📅 Daily Quests", style=discord.ButtonStyle.primary)
         weekly_btn = Button(label="📆 Weekly Quests", style=discord.ButtonStyle.success)
-
         daily_btn.callback = self.show_daily
         weekly_btn.callback = self.show_weekly
+        self.add_item(daily_btn); self.add_item(weekly_btn)
 
-        self.add_item(daily_btn)
-        self.add_item(weekly_btn)
-
-    async def show_daily(self, interaction: discord.Interaction):
-        await self.show_quests(interaction, DAILY_QUESTS, "📅 Daily Quests", discord.Color.blurple())
-
-    async def show_weekly(self, interaction: discord.Interaction):
-        await self.show_quests(interaction, WEEKLY_QUESTS, "📆 Weekly Quests", discord.Color.gold())
+    async def show_daily(self, i): await self.show_quests(i, DAILY_QUESTS, "📅 Daily Quests", discord.Color.blurple())
+    async def show_weekly(self, i): await self.show_quests(i, WEEKLY_QUESTS, "📆 Weekly Quests", discord.Color.gold())
 
     async def show_quests(self, interaction, quest_list, title, color):
         if interaction.user != self.author:
-            await interaction.response.send_message("⚠️ Not your quest menu.", ephemeral=True)
-            return
-
+            await interaction.response.send_message("⚠️ Not your quest menu.", ephemeral=True); return
         embed = discord.Embed(title=title, description="Your current challenges:", color=color)
-
         async with self.bot.db.acquire() as conn:
             for q in quest_list:
-                quest = await conn.fetchrow("""
-                    SELECT progress, completed, claimed
-                    FROM user_quests
-                    WHERE user_id = $1 AND quest_id = $2
-                """, interaction.user.id, q["id"])
-
+                quest = await conn.fetchrow("SELECT progress, completed, claimed FROM user_quests WHERE user_id=$1 AND quest_id=$2", interaction.user.id, q["id"])
                 if quest:
                     bar = progress_bar(quest["progress"], q["target"])
                     status = "✅ Claimed" if quest["claimed"] else ("🏆 Completed" if quest["completed"] else bar)
                 else:
-                    bar = progress_bar(0, q["target"])
-                    status = bar
-
+                    status = progress_bar(0, q["target"])
                 reward = f"💰 {q['reward_coins']} Bloodcoins" if q.get("reward_coins") else f"🎴 {q['reward_item']}"
                 embed.add_field(name=q["desc"], value=f"Progress: {status}\nReward: {reward}", inline=False)
-
-        embed.set_thumbnail(url=self.author.display_avatar.url)
+        embed.set_image(url="https://i.imgur.com/8hQ6YkR.png")  # NPC art
         await interaction.response.edit_message(embed=embed, view=self)
 
-# --- Cog ---
+# --- Cog with resets ---
 class Quests(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.daily_reset.start()
+        self.weekly_reset.start()
+
+    def cog_unload(self):
+        self.daily_reset.cancel()
+        self.weekly_reset.cancel()
+
+    @tasks.loop(hours=24)
+    async def daily_reset(self):
+        now = datetime.datetime.utcnow()
+        target = datetime.datetime.combine(now.date(), datetime.time.min)
+        if now > target: target += datetime.timedelta(days=1)
+        await asyncio.sleep((target - now).total_seconds())
+        async with self.bot.db.acquire() as conn:
+            await conn.execute("DELETE FROM user_quests WHERE quest_id IN (SELECT quest_id FROM quest_templates WHERE type='daily')")
+            await conn.execute("""
+                INSERT INTO user_quests (user_id, quest_id)
+                SELECT u.user_id, q.quest_id
+                FROM users u CROSS JOIN quest_templates q
+                WHERE q.type='daily'
+            """)
+
+    @tasks.loop(hours=168)
+    async def weekly_reset(self):
+        now = datetime.datetime.utcnow()
+        days_ahead = (7 - now.weekday()) % 7
+        target = datetime.datetime.combine(now.date(), datetime.time.min) + datetime.timedelta(days=days_ahead)
+        if now > target: target += datetime.timedelta(days=7)
+        await asyncio.sleep((target - now).total_seconds())
+        async with self.bot.db.acquire() as conn:
+            await conn.execute("DELETE FROM user_quests WHERE quest_id IN (SELECT quest_id FROM quest_templates WHERE type='weekly')")
+            await conn.execute("""
+                INSERT INTO user_quests (user_id, quest_id)
+                SELECT u.user_id, q.quest_id
+                FROM users u CROSS JOIN quest_templates q
+                WHERE q.type='weekly'
+            """)
 
     @commands.command(name="quest", aliases=["quests"])
     async def quest(self, ctx):
-        """Open the Quest Master menu with Daily/Weekly quests."""
-        embed = discord.Embed(
-            title="🧙 Quest Master",
-            description="Welcome adventurer! Choose your quests:",
-            color=discord.Color.purple()
-        )
-        embed.set_image(url="https://cdn.discordapp.com/attachments/1428075046454431784/1428075092520468620/image.png?ex=68f12e12&is=68efdc92&hm=7c4f25bc0659da9d27328a2ba810b6e5ed68395e3673eab9d1499bab32ca392f&")  # Replace with your NPC image
+        embed = discord.Embed(title="🧙 Quest Master", description="Welcome adventurer! Choose your quests:", color=discord.Color.purple())
+        embed.set_image(url="https://i.imgur.com/8hQ6YkR.png")
+        await ctx.send(embed=embed, view=QuestView(self.bot, ctx.author))
 
-        view = QuestView(self.bot, ctx.author)
-        await ctx.send(embed=embed, view=view)
-
-async def setup(bot):
-    await bot.add_cog(Quests(bot))
+async def setup(bot): await bot.add_cog(Quests(bot))
