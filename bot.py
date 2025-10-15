@@ -42,7 +42,8 @@ async def main():
         "cogs.admin",
         "cogs.upgrade",
         "cogs.cooldown_reset",
-        "cogs.daily"
+        "cogs.daily",
+        "cogs.quests"
     ]
 
     for ext in extensions:
