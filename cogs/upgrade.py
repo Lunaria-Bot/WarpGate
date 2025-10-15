@@ -1,3 +1,20 @@
+import discord
+from discord.ext import commands
+
+# Règles d’upgrade : coût en Bloodcoins + copies nécessaires
+UPGRADE_RULES = {
+    "common": {"next": "rare", "cost": 2000, "copies": 5},
+    "rare": {"next": "epic", "cost": 5000, "copies": 20},
+    "epic": {"next": "legendary", "cost": 10000, "copies": 50}
+}
+
+RARITY_COLORS = {
+    "common": discord.Color.light_gray(),
+    "rare": discord.Color.blue(),
+    "epic": discord.Color.purple(),
+    "legendary": discord.Color.gold()
+}
+
 @commands.command(name="upgrade")
 async def upgrade(self, ctx, *, args: str):
     """
