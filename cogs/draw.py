@@ -9,13 +9,28 @@ RARITY_COLORS = {
     "legendary": discord.Color.gold()
 }
 
+# --- Helper: update quest progress ---
+async def update_quest_progress(conn, user_id: int, quest_desc: str, amount: int = 1):
+    """Increment quest progress for a given quest description."""
+    await conn.execute("""
+        UPDATE user_quests uq
+        SET progress = progress + $3,
+            completed = (progress + $3) >= qt.target
+        FROM quest_templates qt
+        WHERE uq.quest_id = qt.quest_id
+          AND uq.user_id = $1
+          AND qt.description = $2
+          AND uq.claimed = FALSE
+    """, user_id, quest_desc, amount)
+
+
 class Draw(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     @commands.command(name="draw")
     async def draw(self, ctx):
-        """Draw a card and earn +10 Bloodcoins."""
+        """Draw a card and earn +10 Bloodcoins. Also updates quest progress."""
         # 1. Animation GIF
         embed = discord.Embed(description="🎴 Drawing in progress...")
         embed.set_image(
@@ -25,7 +40,7 @@ class Draw(commands.Cog):
 
         await asyncio.sleep(2)
 
-        user_id = int(ctx.author.id)  # ✅ force int
+        user_id = int(ctx.author.id)
 
         async with self.bot.db.acquire() as conn:
             # 2. Always pick a Common card
@@ -49,14 +64,19 @@ class Draw(commands.Cog):
                 DO UPDATE SET quantity = user_cards.quantity + 1
             """, user_id, card["card_id"])
 
-            # ✅ 4. Bonus: +10 Bloodcoins à chaque draw
+            # 4. Bonus: +10 Bloodcoins per draw
             await conn.execute("""
                 UPDATE users
                 SET bloodcoins = bloodcoins + 10
                 WHERE user_id = $1
             """, user_id)
 
-        # 5. Show result
+            # 5. ✅ Update quest progress
+            await update_quest_progress(conn, user_id, "Draw 5 times", 1)
+            await update_quest_progress(conn, user_id, "Draw 10 times", 1)
+            await update_quest_progress(conn, user_id, "Draw 100 times", 1)
+
+        # 6. Show result
         rarity = card["rarity"]
         potential = int(card["potential"]) if card["potential"] is not None else 0
 
