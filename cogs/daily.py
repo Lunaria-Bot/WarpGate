@@ -2,6 +2,21 @@ import discord
 from discord.ext import commands
 import datetime
 
+# --- Helper: update quest progress ---
+async def update_quest_progress(conn, user_id: int, quest_desc: str, amount: int = 1):
+    """Increment quest progress for a given quest description."""
+    await conn.execute("""
+        UPDATE user_quests uq
+        SET progress = progress + $3,
+            completed = (progress + $3) >= qt.target
+        FROM quest_templates qt
+        WHERE uq.quest_id = qt.quest_id
+          AND uq.user_id = $1
+          AND qt.description = $2
+          AND uq.claimed = FALSE
+    """, user_id, quest_desc, amount)
+
+
 class Daily(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -9,11 +24,11 @@ class Daily(commands.Cog):
 
     @commands.command(name="daily")
     async def daily(self, ctx):
-        """Claim your daily 10,000 Bloodcoins reward."""
+        """Claim your daily 10,000 Bloodcoins reward and update quests."""
         user_id = int(ctx.author.id)
         now = datetime.datetime.utcnow()
 
-        # Vérifier si le joueur a déjà pris son daily
+        # Check cooldown (24h)
         last_claim = self.cooldowns.get(user_id)
         if last_claim and (now - last_claim).total_seconds() < 86400:
             remaining = 86400 - (now - last_claim).total_seconds()
@@ -23,14 +38,20 @@ class Daily(commands.Cog):
             return
 
         async with self.bot.db.acquire() as conn:
+            # Reward coins
             await conn.execute("""
                 UPDATE users
                 SET bloodcoins = bloodcoins + 10000
                 WHERE user_id = $1
             """, user_id)
 
+            # ✅ Update quest progress
+            await update_quest_progress(conn, user_id, "Do !daily", 1)
+            await update_quest_progress(conn, user_id, "Do 5 !daily", 1)
+
         self.cooldowns[user_id] = now
 
+        # Confirmation embed
         embed = discord.Embed(
             title="🎁 Daily Reward",
             description=f"✅ {ctx.author.display_name}, you received **10,000 Bloodcoins**!",
