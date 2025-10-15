@@ -9,6 +9,7 @@ class Register(commands.Cog):
     async def register(self, ctx):
         """Create a profile for the user if it doesn't exist yet."""
         user_id = int(ctx.author.id)  # ✅ force int
+        username = str(ctx.author.display_name)
 
         async with self.bot.db.acquire() as conn:
             # Check if profile already exists
@@ -17,14 +18,14 @@ class Register(commands.Cog):
             )
 
             if exists:
-                await ctx.send("⚠️ You already have a profile.")
+                await ctx.send(f"⚠️ {ctx.author.display_name}, you already have a profile.")
                 return
 
-            # Insert new profile
+            # Insert new profile with username + balance
             await conn.execute("""
-                INSERT INTO users (user_id, bloodcoins)
-                VALUES ($1, 0)
-            """, user_id)
+                INSERT INTO users (user_id, username, bloodcoins)
+                VALUES ($1, $2, 0)
+            """, user_id, username)
 
         embed = discord.Embed(
             title="✅ Profile Created!",
