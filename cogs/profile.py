@@ -1,6 +1,5 @@
 import discord
 from discord.ext import commands
-import asyncpg
 
 RARITY_EMOJIS = {
     "common": "⚪",
@@ -17,7 +16,7 @@ class Profile(commands.Cog):
     async def profile(self, ctx, member: discord.Member = None):
         """Show the profile of a user (default: yourself)."""
         user = member or ctx.author
-        user_id = user.id
+        user_id = int(user.id)  # ✅ force int
 
         async with self.bot.db.acquire() as conn:
             # 1. Fetch user data
@@ -74,11 +73,13 @@ class Profile(commands.Cog):
             value=profile["created_at"].strftime("%d %B %Y"),
             inline=True
         )
-        embed.add_field(
-            name="🔄 Last Update",
-            value=profile["updated_at"].strftime("%d %B %Y"),
-            inline=True
-        )
+
+        if "updated_at" in profile and profile["updated_at"]:
+            embed.add_field(
+                name="🔄 Last Update",
+                value=profile["updated_at"].strftime("%d %B %Y"),
+                inline=True
+            )
 
         await ctx.send(embed=embed)
 
