@@ -8,7 +8,7 @@ class Register(commands.Cog):
     @commands.command(name="register")
     async def register(self, ctx):
         """Create a profile for the user if it doesn't exist yet."""
-        user_id = ctx.author.id
+        user_id = int(ctx.author.id)  # ✅ force int
 
         async with self.bot.db.acquire() as conn:
             # Check if profile already exists
