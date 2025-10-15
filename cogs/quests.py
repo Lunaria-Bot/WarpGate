@@ -136,7 +136,7 @@ class Quests(commands.Cog):
             description="Welcome adventurer! Choose your quests:",
             color=discord.Color.purple()
         )
-        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1428075046454431784/1428075092520468620/image.png?ex=68f12e12&is=68efdc92&hm=7c4f25bc0659da9d27328a2ba810b6e5ed68395e3673eab9d1499bab32ca392f&")  # Replace with your NPC image
+        embed.set_image(url="https://cdn.discordapp.com/attachments/1428075046454431784/1428075092520468620/image.png?ex=68f12e12&is=68efdc92&hm=7c4f25bc0659da9d27328a2ba810b6e5ed68395e3673eab9d1499bab32ca392f&")  # Replace with your NPC image
 
         view = QuestView(self.bot, ctx.author)
         await ctx.send(embed=embed, view=view)
