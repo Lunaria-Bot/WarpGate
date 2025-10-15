@@ -15,7 +15,8 @@ class Draw(commands.Cog):
 
     @commands.command(name="draw")
     async def draw(self, ctx):
-        # 1. Show animation GIF
+        """Draw a card and earn +10 Bloodcoins."""
+        # 1. Animation GIF
         embed = discord.Embed(description="🎴 Drawing in progress...")
         embed.set_image(
             url="https://media.discordapp.net/attachments/1390792811380478032/1428014081927024734/AZnoEBWwS3YhAlSY-j6uUA-AZnoEBWw4TsWJ2XCcPMwOQ.gif"
@@ -48,7 +49,14 @@ class Draw(commands.Cog):
                 DO UPDATE SET quantity = user_cards.quantity + 1
             """, user_id, card["card_id"])
 
-        # 4. Show result
+            # ✅ 4. Bonus: +10 Bloodcoins à chaque draw
+            await conn.execute("""
+                UPDATE users
+                SET bloodcoins = bloodcoins + 10
+                WHERE user_id = $1
+            """, user_id)
+
+        # 5. Show result
         rarity = card["rarity"]
         potential = int(card["potential"]) if card["potential"] is not None else 0
 
