@@ -1,61 +1,46 @@
-# cogs/draw.py
 import discord
 from discord.ext import commands
-from db import tx, pool
-from redis_client import redis_client   # ✅ on importe bien l'instance
-from rng import weighted_choice
-import time
 
-class DrawCog(commands.Cog):
+class Draw(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.cd_sec = 600  # 10 minutes
 
     @commands.command(name="draw")
-    async def draw(self, ctx: commands.Context):
-        key = f"draw:cd:{ctx.author.id}"
+    async def draw(self, ctx):
+        async with self.bot.db.acquire() as conn:
+            card = await conn.fetchrow("""
+                SELECT card_id, name, rarity, potential, image_url, description
+                FROM cards
+                ORDER BY random()
+                LIMIT 1
+            """)
 
-        # ✅ on utilise redis_client (instance), pas redis.asyncio
-        ttl = await redis_client.ttl(key)
-        if ttl and ttl > 0:
-            next_ts = int(time.time()) + ttl
-            await ctx.send(f"⏳ Tu es en cooldown. Réessaie <t:{next_ts}:R>.")
+        if not card:
+            await ctx.send("Aucune carte disponible.")
             return
 
-        async with tx() as conn:
-            u = await conn.fetchrow("SELECT user_id FROM users WHERE user_id=$1", ctx.author.id)
-            if not u:
-                await ctx.send("⚠️ Tu dois d’abord faire !register.")
-                return
+        # Choix de la couleur selon la rareté
+        rarity_colors = {
+            "common": discord.Color.light_gray(),
+            "rare": discord.Color.blue(),
+            "epic": discord.Color.purple(),
+            "legendary": discord.Color.gold()
+        }
+        color = rarity_colors.get(card["rarity"], discord.Color.dark_gray())
 
-            cards = await conn.fetch("SELECT card_id, drop_weight FROM cards")
-            if not cards:
-                await ctx.send("⚠️ Aucune carte configurée.")
-                return
+        # Création de l'embed
+        embed = discord.Embed(
+            title=f"✨ Tu as obtenu : {card['name']} ✨",
+            description=card["description"] or "Pas de description disponible.",
+            color=color
+        )
+        embed.add_field(name="Rareté", value=card["rarity"].capitalize(), inline=True)
+        embed.add_field(name="Potentiel", value=str(card["potential"]), inline=True)
 
-            choice = weighted_choice([(c["card_id"], c["drop_weight"]) for c in cards])
+        if card["image_url"]:
+            embed.set_thumbnail(url=card["image_url"])
 
-            # Ajout ou incrément de la carte
-            await conn.execute("""
-                INSERT INTO user_cards (user_id, card_id, qty)
-                VALUES ($1, $2, 1)
-                ON CONFLICT (user_id, card_id) DO UPDATE SET qty = user_cards.qty + 1
-            """, ctx.author.id, choice)
-
-            # Ajout d’une monnaie (blood coins)
-            await conn.execute("""
-                UPDATE currencies SET blood_coins = blood_coins + 1, updated_at = NOW()
-                WHERE user_id=$1
-            """, ctx.author.id)
-
-        # ✅ cooldown avec redis_client
-        await redis_client.set(key, "1", ex=self.cd_sec)
-
-        # Feedback carte
-        async with pool().acquire() as conn:
-            card = await conn.fetchrow("SELECT name, rarity FROM cards WHERE card_id=$1", choice)
-
-        await ctx.send(f"🎴 Tu as obtenu: **{card['name']}** [{card['rarity']}]")
+        await ctx.send(embed=embed)
 
 async def setup(bot):
-    await bot.add_cog(DrawCog(bot))
+    await bot.add_cog(Draw(bot))
