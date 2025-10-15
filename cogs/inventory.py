@@ -1,12 +1,55 @@
 import discord
-from discord.ext import commands, menus
+from discord.ext import commands
 
-RARITY_EMOJIS = {
-    "common": "⚪",
-    "rare": "🔵",
-    "epic": "🟣",
-    "legendary": "🟡"
+RARITY_COLORS = {
+    "common": discord.Color.light_gray(),
+    "rare": discord.Color.blue(),
+    "epic": discord.Color.purple(),
+    "legendary": discord.Color.gold()
 }
+
+class CardSelect(discord.ui.Select):
+    def __init__(self, cards):
+        options = [
+            discord.SelectOption(
+                label=f"{c['name']} ({c['rarity'].capitalize()})",
+                description=f"Qty: {c['quantity']}",
+                value=str(c['card_id'])
+            )
+            for c in cards
+        ]
+        super().__init__(placeholder="Select a card to view details…", options=options, min_values=1, max_values=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        # Récupère la carte choisie
+        card_id = int(self.values[0])
+        card = next((c for c in self.view.cards if c["card_id"] == card_id), None)
+
+        if not card:
+            await interaction.response.send_message("⚠️ Card not found.", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title=f"{card['name']}",
+            description=card["description"] or "No description available.",
+            color=RARITY_COLORS.get(card["rarity"], discord.Color.dark_gray())
+        )
+        embed.add_field(name="Rarity", value=card["rarity"].capitalize(), inline=True)
+        embed.add_field(name="Quantity", value=str(card["quantity"]), inline=True)
+        embed.add_field(name="Potential", value="⭐" * int(card["potential"]), inline=True)
+
+        if card["image_url"]:
+            embed.set_image(url=card["image_url"])
+
+        await interaction.response.edit_message(embed=embed, view=self.view)
+
+
+class InventoryView(discord.ui.View):
+    def __init__(self, cards):
+        super().__init__(timeout=120)
+        self.cards = cards
+        self.add_item(CardSelect(cards))
+
 
 class Inventory(commands.Cog):
     def __init__(self, bot):
@@ -14,12 +57,12 @@ class Inventory(commands.Cog):
 
     @commands.command(name="inventory", aliases=["inv"])
     async def inventory(self, ctx):
-        """Show the user's card inventory with pagination."""
+        """Show the user's inventory with a card selector."""
         user_id = int(ctx.author.id)
 
         async with self.bot.db.acquire() as conn:
             rows = await conn.fetch("""
-                SELECT c.base_name, c.name, c.rarity, uc.quantity
+                SELECT c.card_id, c.base_name, c.name, c.rarity, c.potential, c.image_url, c.description, uc.quantity
                 FROM user_cards uc
                 JOIN cards c ON c.card_id = uc.card_id
                 WHERE uc.user_id = $1
@@ -33,54 +76,31 @@ class Inventory(commands.Cog):
                     c.base_name
             """, user_id)
 
-            balance = await conn.fetchval("""
-                SELECT bloodcoins FROM users WHERE user_id = $1
-            """, user_id)
+            balance = await conn.fetchval(
+                "SELECT bloodcoins FROM users WHERE user_id = $1", user_id
+            )
 
         if not rows:
             await ctx.send("📭 Your inventory is empty. Use `!draw` to get cards!")
             return
 
-        # Split inventory into pages of 10 cards
-        pages = []
-        for i in range(0, len(rows), 10):
-            chunk = rows[i:i+10]
-            embed = discord.Embed(
-                title=f"🎴 {ctx.author.display_name}'s Inventory",
-                description=f"💰 Bloodcoins: **{balance}**",
-                color=discord.Color.blurple()
+        # Embed de base (liste des cartes)
+        embed = discord.Embed(
+            title=f"🎴 {ctx.author.display_name}'s Inventory",
+            description=f"💰 Bloodcoins: **{balance}**\nSelect a card below to view details.",
+            color=discord.Color.blurple()
+        )
+        embed.set_thumbnail(url=ctx.author.display_avatar.url)
+
+        for row in rows[:10]:  # affiche un aperçu des 10 premières
+            embed.add_field(
+                name=f"{row['name']} ({row['rarity'].capitalize()})",
+                value=f"Qty: {row['quantity']}",
+                inline=False
             )
-            for row in chunk:
-                rarity_icon = RARITY_EMOJIS.get(row["rarity"], "❔")
-                embed.add_field(
-                    name=f"{rarity_icon} {row['name']}",
-                    value=f"Rarity: {row['rarity'].capitalize()} | Qty: {row['quantity']}",
-                    inline=False
-                )
-            embed.set_thumbnail(url=ctx.author.display_avatar.url)
-            pages.append(embed)
 
-        # Simple paginator with reactions
-        current = 0
-        message = await ctx.send(embed=pages[current])
-        await message.add_reaction("⬅️")
-        await message.add_reaction("➡️")
-
-        def check(reaction, user):
-            return user == ctx.author and str(reaction.emoji) in ["⬅️", "➡️"] and reaction.message.id == message.id
-
-        while True:
-            try:
-                reaction, user = await self.bot.wait_for("reaction_add", timeout=60.0, check=check)
-                if str(reaction.emoji) == "➡️" and current < len(pages) - 1:
-                    current += 1
-                    await message.edit(embed=pages[current])
-                elif str(reaction.emoji) == "⬅️" and current > 0:
-                    current -= 1
-                    await message.edit(embed=pages[current])
-                await message.remove_reaction(reaction, user)
-            except Exception:
-                break
+        view = InventoryView(rows)
+        await ctx.send(embed=embed, view=view)
 
 
 async def setup(bot):
