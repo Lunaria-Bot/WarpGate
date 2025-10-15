@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 
+# Règles d’upgrade : coût en Bloodcoins + copies nécessaires
 UPGRADE_RULES = {
     "common": {"next": "rare", "cost": 2000, "copies": 5},
     "rare": {"next": "epic", "cost": 5000, "copies": 20},
@@ -19,12 +20,20 @@ class Upgrade(commands.Cog):
         self.bot = bot
 
     @commands.command(name="upgrade")
-    async def upgrade(self, ctx, card_id: int):
-        """Upgrade a card into its next rarity version."""
-        user_id = int(ctx.author.id)  # ✅ force int
+    async def upgrade(self, ctx, base_name: str, rarity: str):
+        """
+        Upgrade a card by name and rarity.
+        Exemple: !upgrade Makima Common
+        """
+        user_id = int(ctx.author.id)
+        rarity = rarity.lower()
+
+        if rarity not in UPGRADE_RULES:
+            await ctx.send("⚠️ This rarity cannot be upgraded (or is invalid).")
+            return
 
         async with self.bot.db.acquire() as conn:
-            # 1. Fetch user balance
+            # 1. Vérifie le solde du joueur
             balance = await conn.fetchval(
                 "SELECT bloodcoins FROM users WHERE user_id = $1", user_id
             )
@@ -32,27 +41,22 @@ class Upgrade(commands.Cog):
                 await ctx.send("⚠️ You don't have a profile yet.")
                 return
 
-            # 2. Fetch the card the user owns
+            # 2. Récupère la carte actuelle (par nom + rareté)
             card = await conn.fetchrow("""
                 SELECT uc.quantity, c.card_id, c.name, c.rarity, c.base_name
                 FROM user_cards uc
                 JOIN cards c ON c.card_id = uc.card_id
-                WHERE uc.user_id = $1 AND uc.card_id = $2
-            """, user_id, card_id)
+                WHERE uc.user_id = $1 AND c.base_name = $2 AND c.rarity = $3
+            """, user_id, base_name, rarity)
 
             if not card:
-                await ctx.send("⚠️ You don't own this card.")
-                return
-
-            rarity = card["rarity"].lower()
-            if rarity not in UPGRADE_RULES:
-                await ctx.send("⚠️ This card cannot be upgraded further.")
+                await ctx.send(f"⚠️ You don't own {base_name} ({rarity.capitalize()}).")
                 return
 
             rule = UPGRADE_RULES[rarity]
             next_rarity = rule["next"]
 
-            # 3. Check requirements
+            # 3. Vérifie les conditions
             if balance < rule["cost"]:
                 await ctx.send(f"❌ You need {rule['cost']} BloodCoins to upgrade.")
                 return
@@ -60,7 +64,7 @@ class Upgrade(commands.Cog):
                 await ctx.send(f"❌ You need {rule['copies']} copies of this card to upgrade.")
                 return
 
-            # 4. Find the upgraded version of this card
+            # 4. Trouve la carte de rareté supérieure
             next_card = await conn.fetchrow("""
                 SELECT card_id, name, rarity, image_url, description, potential
                 FROM cards
@@ -71,7 +75,7 @@ class Upgrade(commands.Cog):
                 await ctx.send(f"⚠️ No upgraded version found for {card['name']} → {next_rarity}.")
                 return
 
-            # 5. Transaction: deduct coins, remove copies, add upgraded card
+            # 5. Transaction : retirer coins + copies, ajouter la carte supérieure
             async with conn.transaction():
                 await conn.execute(
                     "UPDATE users SET bloodcoins = bloodcoins - $1 WHERE user_id = $2",
@@ -88,7 +92,7 @@ class Upgrade(commands.Cog):
                     DO UPDATE SET quantity = user_cards.quantity + 1
                 """, user_id, next_card["card_id"])
 
-        # 6. Confirmation embed
+        # 6. Embed de confirmation
         potential = int(next_card["potential"]) if next_card["potential"] is not None else 0
 
         embed = discord.Embed(
@@ -103,6 +107,29 @@ class Upgrade(commands.Cog):
         if next_card["image_url"]:
             embed.set_thumbnail(url=next_card["image_url"])
 
+        await ctx.send(embed=embed)
+
+    @commands.command(name="upgradeinfo")
+    async def upgradeinfo(self, ctx):
+        """Show upgrade requirements for each rarity."""
+        embed = discord.Embed(
+            title="📖 Upgrade Rules",
+            description="Here are the requirements to upgrade your cards:",
+            color=discord.Color.blurple()
+        )
+
+        for rarity, rule in UPGRADE_RULES.items():
+            next_rarity = rule["next"].capitalize()
+            cost = rule["cost"]
+            copies = rule["copies"]
+
+            embed.add_field(
+                name=f"{rarity.capitalize()} ➝ {next_rarity}",
+                value=f"💰 Cost: {cost} BloodCoins\n🃏 Copies: {copies}",
+                inline=False
+            )
+
+        embed.set_footer(text="Legendary cards cannot be upgraded further.")
         await ctx.send(embed=embed)
 
 
