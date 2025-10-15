@@ -1,28 +1,43 @@
-# cogs/inventory.py
 import discord
 from discord.ext import commands
-from db import pool
 
-class InventoryCog(commands.Cog):
+class Inventory(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     @commands.command(name="inventory")
-    async def inventory(self, ctx: commands.Context, member: discord.Member = None):
+    async def inventory(self, ctx, member: discord.Member = None):
+        """Affiche l'inventaire de cartes d'un joueur."""
         target = member or ctx.author
-        async with pool().acquire() as conn:
+
+        async with self.bot.db.acquire() as conn:
             rows = await conn.fetch("""
-                SELECT uc.card_id, c.name, c.rarity, uc.qty
+                SELECT c.name, c.rarity, c.potential, uc.quantity
                 FROM user_cards uc
                 JOIN cards c ON c.card_id = uc.card_id
-                WHERE uc.user_id=$1
-                ORDER BY c.rarity DESC, c.name ASC
+                WHERE uc.user_id = $1
+                ORDER BY c.rarity DESC, c.name
             """, target.id)
-            if not rows:
-                await ctx.send("Inventaire vide.")
-                return
-            lines = [f"{r['name']} [{r['rarity']}] x{r['qty']}" for r in rows]
-            await ctx.send("Inventaire:\n" + "\n".join(lines))
+
+        if not rows:
+            await ctx.send(f"{target.display_name} n'a aucune carte.")
+            return
+
+        # Construction de l'embed
+        embed = discord.Embed(
+            title=f"📦 Inventory of {target.display_name}",
+            color=discord.Color.blue()
+        )
+
+        for row in rows:
+            stars = "⭐" * row["potential"]
+            embed.add_field(
+                name=f"{row['name']} ({row['rarity'].capitalize()})",
+                value=f"Qty: {row['quantity']} | Potential: {stars}",
+                inline=False
+            )
+
+        await ctx.send(embed=embed)
 
 async def setup(bot):
-    await bot.add_cog(InventoryCog(bot))
+    await bot.add_cog(Inventory(bot))
