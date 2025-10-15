@@ -1,67 +1,106 @@
-# cogs/upgrade.py
 import discord
 from discord.ext import commands
-from db import tx, pool
 
-class UpgradeCog(commands.Cog):
+UPGRADE_RULES = {
+    "common": {"next": "rare", "cost": 2000, "copies": 5},
+    "rare": {"next": "epic", "cost": 5000, "copies": 20},
+    "epic": {"next": "legendary", "cost": 10000, "copies": 50}
+}
+
+RARITY_COLORS = {
+    "common": discord.Color.light_gray(),
+    "rare": discord.Color.blue(),
+    "epic": discord.Color.purple(),
+    "legendary": discord.Color.gold()
+}
+
+class Upgrade(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     @commands.command(name="upgrade")
-    async def upgrade(self, ctx: commands.Context, card_id: str):
-        async with tx() as conn:
-            # Vérifie que l’utilisateur possède la carte
-            uc = await conn.fetchrow("""
-                SELECT uc.qty, uc.upgrade_level, c.name, c.rarity, c.potential,
-                       c.image_url, c.description
+    async def upgrade(self, ctx, card_id: int):
+        """Upgrade a card into its next rarity version."""
+        user_id = ctx.author.id
+
+        async with self.bot.db.acquire() as conn:
+            # 1. Fetch user balance
+            balance = await conn.fetchval(
+                "SELECT bloodcoins FROM users WHERE user_id = $1", user_id
+            )
+            if balance is None:
+                await ctx.send("⚠️ You don't have a profile yet.")
+                return
+
+            # 2. Fetch the card the user owns
+            card = await conn.fetchrow("""
+                SELECT uc.quantity, c.card_id, c.name, c.rarity, c.base_name
                 FROM user_cards uc
                 JOIN cards c ON c.card_id = uc.card_id
-                WHERE uc.user_id=$1 AND uc.card_id=$2
-            """, ctx.author.id, card_id)
+                WHERE uc.user_id = $1 AND uc.card_id = $2
+            """, user_id, card_id)
 
-            if not uc:
-                await ctx.send("⚠️ Tu ne possèdes pas cette carte.")
+            if not card:
+                await ctx.send("⚠️ You don't own this card.")
                 return
 
-            if uc["upgrade_level"] >= 5:
-                await ctx.send("⭐ Cette carte est déjà au niveau maximum.")
+            rarity = card["rarity"].lower()
+            if rarity not in UPGRADE_RULES:
+                await ctx.send("⚠️ This card cannot be upgraded further.")
                 return
 
-            # Vérifie que l’utilisateur a assez de monnaie
-            cur = await conn.fetchrow("SELECT blood_coins FROM currencies WHERE user_id=$1", ctx.author.id)
-            cost = 10 * (uc["upgrade_level"] + 1)  # coût croissant
-            if cur["blood_coins"] < cost:
-                await ctx.send(f"💰 Il te faut {cost} Blood Coins pour améliorer cette carte.")
+            rule = UPGRADE_RULES[rarity]
+            next_rarity = rule["next"]
+
+            # 3. Check requirements
+            if balance < rule["cost"]:
+                await ctx.send(f"❌ You need {rule['cost']} BloodCoins to upgrade.")
+                return
+            if card["quantity"] < rule["copies"]:
+                await ctx.send(f"❌ You need {rule['copies']} copies of this card to upgrade.")
                 return
 
-            # Déduit le coût et upgrade
-            await conn.execute(
-                "UPDATE currencies SET blood_coins = blood_coins - $1 WHERE user_id=$2",
-                cost, ctx.author.id
-            )
-            await conn.execute(
-                "UPDATE user_cards SET upgrade_level = upgrade_level + 1 WHERE user_id=$1 AND card_id=$2",
-                ctx.author.id, card_id
-            )
+            # 4. Find the upgraded version of this card
+            next_card = await conn.fetchrow("""
+                SELECT card_id, name, rarity, image_url, description, potential
+                FROM cards
+                WHERE base_name = $1 AND rarity = $2
+            """, card["base_name"], next_rarity)
 
-        # Embed résultat
-        new_level = uc["upgrade_level"] + 1
-        stars = "★" * min(uc["potential"] + new_level, 5)
+            if not next_card:
+                await ctx.send(f"⚠️ No upgraded version found for {card['name']} → {next_rarity}.")
+                return
 
+            # 5. Transaction: deduct coins, remove copies, add upgraded card
+            async with conn.transaction():
+                await conn.execute(
+                    "UPDATE users SET bloodcoins = bloodcoins - $1 WHERE user_id = $2",
+                    rule["cost"], user_id
+                )
+                await conn.execute(
+                    "UPDATE user_cards SET quantity = quantity - $1 WHERE user_id = $2 AND card_id = $3",
+                    rule["copies"], user_id, card["card_id"]
+                )
+                await conn.execute("""
+                    INSERT INTO user_cards (user_id, card_id, quantity)
+                    VALUES ($1, $2, 1)
+                    ON CONFLICT (user_id, card_id)
+                    DO UPDATE SET quantity = user_cards.quantity + 1
+                """, user_id, next_card["card_id"])
+
+        # 6. Confirmation embed
         embed = discord.Embed(
-            title=f"✨ Upgrade réussi !",
-            description=(
-                f"Ta carte **{uc['name']}** évolue.\n\n"
-                f"⭐ Potentiel: {stars}\n"
-                f"Rareté: {uc['rarity']}\n\n"
-                f"{uc['description'] or ''}"
-            ),
-            color=discord.Color.green()
+            title="🔼 Upgrade Successful!",
+            description=f"{card['name']} has been upgraded to **{next_rarity.capitalize()}**!",
+            color=RARITY_COLORS.get(next_rarity, discord.Color.dark_gray())
         )
-        if uc["image_url"]:
-            embed.set_image(url=uc["image_url"])
+        embed.add_field(name="Cost", value=f"{rule['cost']} BloodCoins", inline=True)
+        embed.add_field(name="Copies Used", value=str(rule["copies"]), inline=True)
+        if next_card["image_url"]:
+            embed.set_thumbnail(url=next_card["image_url"])
 
         await ctx.send(embed=embed)
 
+
 async def setup(bot):
-    await bot.add_cog(UpgradeCog(bot))
+    await bot.add_cog(Upgrade(bot))
