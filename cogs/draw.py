@@ -24,6 +24,8 @@ class Draw(commands.Cog):
 
         await asyncio.sleep(2)
 
+        user_id = int(ctx.author.id)  # ✅ force int
+
         async with self.bot.db.acquire() as conn:
             # 2. Always pick a Common card
             card = await conn.fetchrow("""
@@ -44,7 +46,7 @@ class Draw(commands.Cog):
                 VALUES ($1, $2, 1)
                 ON CONFLICT (user_id, card_id)
                 DO UPDATE SET quantity = user_cards.quantity + 1
-            """, ctx.author.id, card["card_id"])
+            """, user_id, card["card_id"])
 
         # 4. Show result
         rarity = card["rarity"]
