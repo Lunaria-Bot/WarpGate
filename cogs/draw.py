@@ -1,4 +1,3 @@
-import random
 import discord
 from discord.ext import commands
 import asyncio
@@ -19,7 +18,7 @@ class Draw(commands.Cog):
         # 1. Show animation GIF
         embed = discord.Embed(description="🎴 Drawing in progress...")
         embed.set_image(
-            url="https://media.discordapp.net/attachments/1390792811380478032/1428014081927024734/AZnoEBWwS3YhAlSY-j6uUA-AZnoEBWw4TsWJ2XCcPMwOQ.gif?ex=68f0f540&is=68efa3c0&hm=48143b857f5152e9e9c780bc66b65c1838b985a42f93da75cd333a774214bd67&=&width=440&height=248"
+            url="https://media.discordapp.net/attachments/1390792811380478032/1428014081927024734/AZnoEBWwS3YhAlSY-j6uUA-AZnoEBWw4TsWJ2XCcPMwOQ.gif"
         )
         anim_msg = await ctx.send(embed=embed)
 
@@ -28,7 +27,7 @@ class Draw(commands.Cog):
         async with self.bot.db.acquire() as conn:
             # 2. Always pick a Common card
             card = await conn.fetchrow("""
-                SELECT card_id, name, rarity, potential, image_url, description
+                SELECT card_id, base_name, name, rarity, potential, image_url, description
                 FROM cards
                 WHERE rarity = 'common'
                 ORDER BY random()
@@ -48,13 +47,16 @@ class Draw(commands.Cog):
             """, ctx.author.id, card["card_id"])
 
         # 4. Show result
+        rarity = card["rarity"]
+        potential = int(card["potential"]) if card["potential"] is not None else 0
+
         result_embed = discord.Embed(
             title=f"✨ You drew: {card['name']} ✨",
             description=card["description"] or "No description available.",
-            color=RARITY_COLORS.get("common", discord.Color.dark_gray())
+            color=RARITY_COLORS.get(rarity, discord.Color.dark_gray())
         )
-        result_embed.add_field(name="Rarity", value="Common", inline=True)
-        result_embed.add_field(name="Potential", value="⭐" * card["potential"], inline=True)
+        result_embed.add_field(name="Rarity", value=rarity.capitalize(), inline=True)
+        result_embed.add_field(name="Potential", value="⭐" * potential, inline=True)
 
         if card["image_url"]:
             result_embed.set_thumbnail(url=card["image_url"])
