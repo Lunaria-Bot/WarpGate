@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 
-MAX_OPTIONS = 9  # ✅ 9 cartes par page
+MAX_OPTIONS = 9  # 9 cartes par page
 
 RARITY_COLORS = {
     "common": discord.Color.light_gray(),
@@ -61,7 +61,7 @@ class RarityFilter(discord.ui.Select):
         self.parent_view.filter_rarity = self.values[0]
         self.parent_view.page = 0
         self.parent_view.update_view()
-        await interaction.response.edit_message(view=self.parent_view)
+        await interaction.response.edit_message(embed=self.parent_view.embed, view=self.parent_view)
 
 
 class InventoryView(discord.ui.View):
@@ -87,6 +87,17 @@ class InventoryView(discord.ui.View):
         end = start + MAX_OPTIONS
         page_cards = filtered[start:end]
 
+        # Embed liste compacte
+        desc = "\n".join(
+            f"• {c['name']} ({c['rarity'].capitalize()}) x{c['quantity']}"
+            for c in page_cards
+        ) or "Aucune carte"
+        self.embed = discord.Embed(
+            title=f"📦 Inventory (Page {self.page+1}/{self.total_pages} – {total_count} cartes)",
+            description=desc,
+            color=discord.Color.blue()
+        )
+
         if page_cards:
             self.add_item(CardSelect(page_cards, self.page, self.total_pages, total_count))
 
@@ -108,7 +119,7 @@ class PrevButton(discord.ui.Button):
         if view.page > 0:
             view.page -= 1
             view.update_view()
-            await interaction.response.edit_message(view=view)
+            await interaction.response.edit_message(embed=view.embed, view=view)
 
 
 class NextButton(discord.ui.Button):
@@ -120,7 +131,7 @@ class NextButton(discord.ui.Button):
         if view.page < view.total_pages - 1:
             view.page += 1
             view.update_view()
-            await interaction.response.edit_message(view=view)
+            await interaction.response.edit_message(embed=view.embed, view=view)
 
 
 class Inventory(commands.Cog):
@@ -147,21 +158,8 @@ class Inventory(commands.Cog):
 
         cards = [dict(row) for row in rows]
 
-        # Embed par défaut (première carte)
-        first = cards[0]
-        embed = discord.Embed(
-            title=first["name"],
-            description=first["description"] or "No description.",
-            color=RARITY_COLORS.get(first["rarity"], discord.Color.blue())
-        )
-        embed.add_field(name="Rarity", value=first["rarity"].capitalize(), inline=True)
-        embed.add_field(name="Potential", value="⭐" * first["potential"], inline=True)
-        embed.add_field(name="Quantity", value=str(first["quantity"]), inline=True)
-        if first["image_url"]:
-            embed.set_image(url=first["image_url"])
-
         view = InventoryView(cards)
-        await ctx.send(embed=embed, view=view)
+        await ctx.send(embed=view.embed, view=view)
 
 
 async def setup(bot):
