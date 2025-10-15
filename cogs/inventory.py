@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+from discord.ui import View, Button, Select
 
 RARITY_COLORS = {
     "common": discord.Color.light_gray(),
@@ -8,9 +9,10 @@ RARITY_COLORS = {
     "legendary": discord.Color.gold()
 }
 
-RARITY_ORDER = ["common", "rare", "epic", "legendary"]
+RARITY_ORDER = ["legendary", "epic", "rare", "common"]
 
-class RaritySelect(discord.ui.Select):
+
+class RaritySelect(Select):
     def __init__(self, parent_view):
         options = [
             discord.SelectOption(label="All", value="all", description="Show all rarities"),
@@ -23,14 +25,12 @@ class RaritySelect(discord.ui.Select):
         self.parent_view = parent_view
 
     async def callback(self, interaction: discord.Interaction):
-        rarity = self.values[0]
-        self.parent_view.current_rarity = rarity
-        # Met à jour le menu des cartes
-        self.parent_view.update_card_select()
-        await interaction.response.edit_message(embed=self.parent_view.base_embed, view=self.parent_view)
+        self.parent_view.current_rarity = self.values[0]
+        self.parent_view.page = 0  # reset pagination
+        await interaction.response.edit_message(embed=self.parent_view.format_page(), view=self.parent_view)
 
 
-class CardSelect(discord.ui.Select):
+class CardSelect(Select):
     def __init__(self, parent_view, cards):
         self.parent_view = parent_view
         options = [
@@ -66,35 +66,81 @@ class CardSelect(discord.ui.Select):
         await interaction.response.edit_message(embed=embed, view=self.parent_view)
 
 
-class InventoryView(discord.ui.View):
-    def __init__(self, cards, base_embed):
+class InventoryView(View):
+    def __init__(self, cards, balance, author):
         super().__init__(timeout=120)
         self.cards = cards
-        self.base_embed = base_embed
+        self.balance = balance
+        self.author = author
         self.current_rarity = "all"
+        self.page = 0
+        self.per_page = 10
 
-        # Ajoute le filtre de rareté
+        # Ajoute les contrôles
         self.add_item(RaritySelect(self))
-        # Ajoute le sélecteur de cartes
         self.card_select = None
         self.update_card_select()
 
+        # Boutons pagination
+        prev_button = Button(label="⬅️", style=discord.ButtonStyle.secondary)
+        next_button = Button(label="➡️", style=discord.ButtonStyle.secondary)
+        prev_button.callback = self.prev_page
+        next_button.callback = self.next_page
+        self.add_item(prev_button)
+        self.add_item(next_button)
+
+    def get_filtered_cards(self):
+        if self.current_rarity == "all":
+            return self.cards
+        return [c for c in self.cards if c["rarity"] == self.current_rarity]
+
     def update_card_select(self):
-        # Supprime l’ancien sélecteur si présent
         if self.card_select:
             self.remove_item(self.card_select)
-
-        # Filtre les cartes
-        if self.current_rarity == "all":
-            filtered = self.cards
-        else:
-            filtered = [c for c in self.cards if c["rarity"] == self.current_rarity]
-
+        filtered = self.get_filtered_cards()
         if not filtered:
             filtered = [{"card_id": -1, "name": "No cards", "rarity": "none", "quantity": 0, "potential": 0, "description": "", "image_url": None}]
-
         self.card_select = CardSelect(self, filtered)
         self.add_item(self.card_select)
+
+    def format_page(self):
+        filtered = self.get_filtered_cards()
+        start = self.page * self.per_page
+        end = start + self.per_page
+        chunk = filtered[start:end]
+
+        embed = discord.Embed(
+            title=f"🎴 {self.author.display_name}'s Inventory",
+            description=f"💰 Bloodcoins: **{self.balance}**\nPage {self.page+1}/{max(1, (len(filtered)-1)//self.per_page+1)}",
+            color=discord.Color.blurple()
+        )
+        embed.set_thumbnail(url=self.author.display_avatar.url)
+
+        for c in chunk:
+            embed.add_field(
+                name=f"{c['base_name']} ({c['rarity'].capitalize()})",
+                value=f"Qty: {c['quantity']}",
+                inline=False
+            )
+
+        return embed
+
+    async def prev_page(self, interaction: discord.Interaction):
+        if interaction.user != self.author:
+            await interaction.response.send_message("⚠️ This is not your inventory.", ephemeral=True)
+            return
+        if self.page > 0:
+            self.page -= 1
+            await interaction.response.edit_message(embed=self.format_page(), view=self)
+
+    async def next_page(self, interaction: discord.Interaction):
+        if interaction.user != self.author:
+            await interaction.response.send_message("⚠️ This is not your inventory.", ephemeral=True)
+            return
+        filtered = self.get_filtered_cards()
+        if self.page < (len(filtered)-1)//self.per_page:
+            self.page += 1
+            await interaction.response.edit_message(embed=self.format_page(), view=self)
 
 
 class Inventory(commands.Cog):
@@ -103,7 +149,7 @@ class Inventory(commands.Cog):
 
     @commands.command(name="inventory", aliases=["inv"])
     async def inventory(self, ctx):
-        """Show the user's inventory with rarity filter and card selector."""
+        """Show the user's inventory with rarity filter, card selector, and pagination."""
         user_id = int(ctx.author.id)
 
         async with self.bot.db.acquire() as conn:
@@ -130,16 +176,8 @@ class Inventory(commands.Cog):
             await ctx.send("📭 Your inventory is empty. Use `!draw` to get cards!")
             return
 
-        # Embed de base
-        embed = discord.Embed(
-            title=f"🎴 {ctx.author.display_name}'s Inventory",
-            description=f"💰 Bloodcoins: **{balance}**\nUse the menus below to filter and view cards.",
-            color=discord.Color.blurple()
-        )
-        embed.set_thumbnail(url=ctx.author.display_avatar.url)
-
-        view = InventoryView(rows, embed)
-        await ctx.send(embed=embed, view=view)
+        view = InventoryView(rows, balance, ctx.author)
+        await ctx.send(embed=view.format_page(), view=view)
 
 
 async def setup(bot):
