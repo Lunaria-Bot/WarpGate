@@ -21,7 +21,7 @@ class Upgrade(commands.Cog):
     @commands.command(name="upgrade")
     async def upgrade(self, ctx, card_id: int):
         """Upgrade a card into its next rarity version."""
-        user_id = ctx.author.id
+        user_id = int(ctx.author.id)  # ✅ force int
 
         async with self.bot.db.acquire() as conn:
             # 1. Fetch user balance
