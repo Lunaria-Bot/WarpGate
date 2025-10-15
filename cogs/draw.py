@@ -16,10 +16,10 @@ class Draw(commands.Cog):
             """)
 
         if not card:
-            await ctx.send("Aucune carte disponible.")
+            await ctx.send("No cards available.")
             return
 
-        # Choix de la couleur selon la rareté
+        # Color mapping by rarity
         rarity_colors = {
             "common": discord.Color.light_gray(),
             "rare": discord.Color.blue(),
@@ -28,14 +28,14 @@ class Draw(commands.Cog):
         }
         color = rarity_colors.get(card["rarity"], discord.Color.dark_gray())
 
-        # Création de l'embed
+        # Build the embed
         embed = discord.Embed(
-            title=f"✨ Tu as obtenu : {card['name']} ✨",
-            description=card["description"] or "Pas de description disponible.",
+            title=f"✨ You drew: {card['name']} ✨",
+            description=card["description"] or "No description available.",
             color=color
         )
-        embed.add_field(name="Rareté", value=card["rarity"].capitalize(), inline=True)
-        embed.add_field(name="Potentiel", value=str(card["potential"]), inline=True)
+        embed.add_field(name="Rarity", value=card["rarity"].capitalize(), inline=True)
+        embed.add_field(name="Potential", value=str(card["potential"]), inline=True)
 
         if card["image_url"]:
             embed.set_thumbnail(url=card["image_url"])
