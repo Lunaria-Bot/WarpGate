@@ -22,15 +22,21 @@ class Draw(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="draw")
-    async def draw(self, ctx):
-        # 1. Envoyer une animation GIF (toujours le même)
-        anim_msg = await ctx.send(
-            "🎴 Tirage en cours...",
-            embed = discord.Embed(description="🎴 Tirage en cours...")
-            embed.set_image(url="https://media.discordapp.net/attachments/1390792811380478032/1428014081927024734/AZnoEBWwS3YhAlSY-j6uUA-AZnoEBWw4TsWJ2XCcPMwOQ.gif?ex=68f0f540&is=68efa3c0&hm=48143b857f5152e9e9c780bc66b65c1838b985a42f93da75cd333a774214bd67&=&width=440&height=248")
-            anim_msg = await ctx.send(embed=embed)
-        )
+  @commands.command(name="draw")
+async def draw(self, ctx):
+    # 1. Créer l'embed avec le GIF
+    embed = discord.Embed(description="🎴 Tirage en cours...")
+    embed.set_image(
+        url="https://media.discordapp.net/attachments/1390792811380478032/1428014081927024734/AZnoEBWwS3YhAlSY-j6uUA-AZnoEBWw4TsWJ2XCcPMwOQ.gif?ex=68f0f540&is=68efa3c0&hm=48143b857f5152e9e9c780bc66b65c1838b985a42f93da75cd333a774214bd67&=&width=440&height=248"
+    )
+
+    # 2. Envoyer l'embed
+    anim_msg = await ctx.send(embed=embed)
+
+    # 3. Attendre un délai avant de révéler la carte
+    await asyncio.sleep(2)
+
+    # … ici tu continues avec le tirage de la carte et l’édition du message
 
         # 2. Attendre un petit délai (2 secondes par ex.)
         await asyncio.sleep(2)
