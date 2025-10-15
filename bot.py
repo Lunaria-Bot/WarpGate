@@ -1,4 +1,5 @@
 # bot.py
+import asyncio
 import discord
 from discord.ext import commands
 from config import settings
@@ -25,8 +26,9 @@ async def on_command_error(ctx, error):
     await ctx.send(f"⚠️ Erreur: {error}")
 
 async def main():
-    await init_db()
-    await init_redis()
+    # Initialisation DB et Redis
+    bot.db = await init_db()          # <--- on attache le pool PostgreSQL au bot
+    bot.redis = await init_redis()    # <--- idem pour Redis si tu veux y accéder dans tes cogs
 
     # Liste des cogs à charger
     extensions = [
@@ -52,5 +54,4 @@ async def main():
     await bot.start(settings.DISCORD_TOKEN)
 
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())
