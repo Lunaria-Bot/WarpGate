@@ -37,7 +37,8 @@ async def main():
         "cogs.inventory",
         "cogs.faction",
         "cogs.trade",
-        "cogs.admin"
+        "cogs.admin",
+        "cogs.upgrade"
     ]
 
     for ext in extensions:
