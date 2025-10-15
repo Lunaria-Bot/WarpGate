@@ -51,8 +51,9 @@ class Draw(commands.Cog):
                 LIMIT 1
             """, chosen_rarity)
 
+            # ✅ Sécurité ajoutée
             if not card:
-                await anim_msg.edit(content="❌ Aucune carte disponible.")
+                await ctx.send(f"⚠️ Pas de carte disponible pour la rareté {chosen_rarity}. Vérifie ta base.")
                 return
 
             # 6. Enregistrement dans user_cards (UPSERT)
