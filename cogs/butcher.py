@@ -139,12 +139,12 @@ class ButcherView(View):
             await inter.response.send_modal(QuantityModal(self.bot, card, value))
 
         select.callback = select_callback
-        view = View()
+        view = ButcherView(self.bot, self.author)  # réutilise la vue avec Leave
         view.add_item(select)
 
         embed = discord.Embed(
             title="🔪 Butchering",
-            description="Choose a card and enter how many copies you want to butcher.",
+            description="How many copies you want to sell to the butcher.",
             color=discord.Color.dark_red()
         )
         embed.set_image(url=BUTCHER_IMAGE)
