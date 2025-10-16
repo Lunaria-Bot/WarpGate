@@ -26,21 +26,20 @@ BURN_VALUES = {
 }
 
 # --- Modal for quantity input ---
-class QuantityModal(Modal):
+class QuantityModal(Modal, title="Butcher"):
+    quantity = TextInput(
+        label="Quantity to butcher",
+        placeholder="Enter a number",
+        required=True
+    )
+
     def __init__(self, bot, card, value):
-        super().__init__(title=f"Butcher {card['name']}")
+        super().__init__()
         self.bot = bot
         self.card = card
         self.value = value
 
-        self.quantity = TextInput(
-            label="Quantity to butcher",
-            placeholder="Enter a number",
-            required=True
-        )
-        self.add_item(self.quantity)
-
-    async def callback(self, interaction: discord.Interaction):
+    async def on_submit(self, interaction: discord.Interaction):
         try:
             qty = int(self.quantity.value)
         except ValueError:
