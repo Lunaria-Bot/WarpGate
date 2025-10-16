@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-from discord.ui import View, Button, Select, Modal, InputText
+from discord.ui import View, Button, Select, Modal, TextInput
 import random
 
 # --- Butcher Quotes ---
@@ -32,11 +32,17 @@ class QuantityModal(Modal):
         self.bot = bot
         self.card = card
         self.value = value
-        self.add_item(InputText(label="Quantity to butcher", placeholder="Enter a number", min_length=1))
+
+        self.quantity = TextInput(
+            label="Quantity to butcher",
+            placeholder="Enter a number",
+            required=True
+        )
+        self.add_item(self.quantity)
 
     async def callback(self, interaction: discord.Interaction):
         try:
-            qty = int(self.children[0].value)
+            qty = int(self.quantity.value)
         except ValueError:
             await interaction.response.send_message("⚠️ Invalid number.", ephemeral=True)
             return
