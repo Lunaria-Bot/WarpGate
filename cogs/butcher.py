@@ -25,6 +25,8 @@ BURN_VALUES = {
     "legendary": 10000
 }
 
+BUTCHER_IMAGE = "https://media.discordapp.net/attachments/1428075046454431784/1428088206192279666/image.png?format=webp&quality=lossless&width=1027&height=575"
+
 # --- Modal for quantity input ---
 class QuantityModal(Modal, title="Butcher"):
     quantity = TextInput(
@@ -79,12 +81,15 @@ class ButcherView(View):
 
         value_btn = Button(label="📖 Value", style=discord.ButtonStyle.primary)
         butcher_btn = Button(label="🔪 Butchering", style=discord.ButtonStyle.danger)
+        leave_btn = Button(label="🚪 Leave the shop", style=discord.ButtonStyle.secondary)
 
         value_btn.callback = self.show_value
         butcher_btn.callback = self.show_butchering
+        leave_btn.callback = self.leave_shop
 
         self.add_item(value_btn)
         self.add_item(butcher_btn)
+        self.add_item(leave_btn)
 
     async def show_value(self, interaction: discord.Interaction):
         if interaction.user != self.author:
@@ -96,6 +101,7 @@ class ButcherView(View):
             description="\n".join([f"**1 {r.capitalize()}** = 💰 {v} Bloodcoins" for r, v in BURN_VALUES.items()]),
             color=discord.Color.red()
         )
+        embed.set_image(url=BUTCHER_IMAGE)
         await interaction.response.edit_message(embed=embed, view=self)
 
     async def show_butchering(self, interaction: discord.Interaction):
@@ -141,7 +147,22 @@ class ButcherView(View):
             description="Choose a card and enter how many copies you want to butcher.",
             color=discord.Color.dark_red()
         )
+        embed.set_image(url=BUTCHER_IMAGE)
         await interaction.response.edit_message(embed=embed, view=view)
+
+    async def leave_shop(self, interaction: discord.Interaction):
+        if interaction.user != self.author:
+            await interaction.response.send_message("⚠️ This menu is not for you.", ephemeral=True)
+            return
+
+        quote = random.choice(BUTCHER_QUOTES)
+        embed = discord.Embed(
+            title="🥩 The Butcher",
+            description=f"_{quote}_\n\nWelcome back, {interaction.user.display_name}...",
+            color=discord.Color.dark_red()
+        )
+        embed.set_image(url=BUTCHER_IMAGE)
+        await interaction.response.edit_message(embed=embed, view=self)
 
 # --- Cog ---
 class Butcher(commands.Cog):
@@ -157,7 +178,7 @@ class Butcher(commands.Cog):
             description=f"_{quote}_\n\nWelcome, {ctx.author.display_name}...",
             color=discord.Color.dark_red()
         )
-        embed.set_image(url="https://media.discordapp.net/attachments/1428075046454431784/1428088206192279666/image.png?format=webp&quality=lossless&width=1027&height=575")
+        embed.set_image(url=BUTCHER_IMAGE)
 
         view = ButcherView(self.bot, ctx.author)
         await ctx.send(embed=embed, view=view)
