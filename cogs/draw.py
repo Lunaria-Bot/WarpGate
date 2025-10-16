@@ -39,9 +39,11 @@ class Draw(commands.Cog):
         self.bot = bot
 
     @commands.command(name="draw")
+    @commands.cooldown(1, 600, commands.BucketType.user)  # 1 utilisation toutes les 600s (10 min) par joueur
     async def draw(self, ctx):
-        """Draw a card and earn +10 Bloodcoins. Also updates quest progress.
-        With 10% chance, encounter a Mimic instead."""
+        """Draw a card with a 10% chance of encountering a Mimic instead.
+        +10 Bloodcoins per draw, updates quest progress, 10 min cooldown per user.
+        """
         # 1. Animation GIF
         embed = discord.Embed(description="🎴 Drawing in progress...")
         embed.set_image(
@@ -111,6 +113,16 @@ class Draw(commands.Cog):
             result_embed.set_thumbnail(url=card["image_url"])
 
         await anim_msg.edit(content=None, attachments=[], embed=result_embed)
+
+    @draw.error
+    async def draw_error(self, ctx, error):
+        if isinstance(error, commands.CommandOnCooldown):
+            minutes = int(error.retry_after // 60)
+            seconds = int(error.retry_after % 60)
+            await ctx.send(
+                f"⏳ Tu dois attendre encore **{minutes}m {seconds}s** avant de pouvoir utiliser `!draw` à nouveau.",
+                delete_after=10
+            )
 
 
 async def setup(bot):
