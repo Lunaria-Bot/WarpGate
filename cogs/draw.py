@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 import asyncio
+import random
 
 RARITY_COLORS = {
     "common": discord.Color.light_gray(),
@@ -8,6 +9,15 @@ RARITY_COLORS = {
     "epic": discord.Color.purple(),
     "legendary": discord.Color.gold()
 }
+
+# --- Mimic data ---
+MIMIC_QUOTES = [
+    "Treasure? Oh no, I’m the real reward.",
+    "Curiosity tastes almost as good as fear.",
+    "Funny how you never suspect the things you want most."
+]
+
+MIMIC_IMAGE = "https://media.discordapp.net/attachments/1428401795364814948/1428401824024756316/image.png?format=webp&quality=lossless&width=880&height=493"
 
 # --- Helper: update quest progress ---
 async def update_quest_progress(conn, user_id: int, quest_desc: str, amount: int = 1):
@@ -30,7 +40,8 @@ class Draw(commands.Cog):
 
     @commands.command(name="draw")
     async def draw(self, ctx):
-        """Draw a card and earn +10 Bloodcoins. Also updates quest progress."""
+        """Draw a card and earn +10 Bloodcoins. Also updates quest progress.
+        With 10% chance, encounter a Mimic instead."""
         # 1. Animation GIF
         embed = discord.Embed(description="🎴 Drawing in progress...")
         embed.set_image(
@@ -40,10 +51,22 @@ class Draw(commands.Cog):
 
         await asyncio.sleep(2)
 
+        # 2. Check Mimic encounter (10%)
+        if random.randint(1, 100) <= 10:
+            quote = random.choice(MIMIC_QUOTES)
+            mimic_embed = discord.Embed(
+                title="👾 A wild Mimic appears!",
+                description=f"_{quote}_\n\nAs you saw him you ran away (Update coming soon)",
+                color=discord.Color.dark_red()
+            )
+            mimic_embed.set_image(url=MIMIC_IMAGE)
+            await anim_msg.edit(embed=mimic_embed, content=None, attachments=[])
+            return
+
+        # 3. Normal draw logic
         user_id = int(ctx.author.id)
 
         async with self.bot.db.acquire() as conn:
-            # 2. Always pick a Common card
             card = await conn.fetchrow("""
                 SELECT card_id, base_name, name, rarity, potential, image_url, description
                 FROM cards
@@ -56,7 +79,6 @@ class Draw(commands.Cog):
                 await anim_msg.edit(content="⚠️ No common cards available in the database.")
                 return
 
-            # 3. Insert or update user inventory
             await conn.execute("""
                 INSERT INTO user_cards (user_id, card_id, quantity)
                 VALUES ($1, $2, 1)
@@ -64,19 +86,16 @@ class Draw(commands.Cog):
                 DO UPDATE SET quantity = user_cards.quantity + 1
             """, user_id, card["card_id"])
 
-            # 4. Bonus: +10 Bloodcoins per draw
             await conn.execute("""
                 UPDATE users
                 SET bloodcoins = bloodcoins + 10
                 WHERE user_id = $1
             """, user_id)
 
-            # 5. ✅ Update quest progress
             await update_quest_progress(conn, user_id, "Draw 5 times", 1)
             await update_quest_progress(conn, user_id, "Draw 10 times", 1)
             await update_quest_progress(conn, user_id, "Draw 100 times", 1)
 
-        # 6. Show result
         rarity = card["rarity"]
         potential = int(card["potential"]) if card["potential"] is not None else 0
 
