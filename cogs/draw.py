@@ -120,7 +120,7 @@ class Draw(commands.Cog):
             minutes = int(error.retry_after // 60)
             seconds = int(error.retry_after % 60)
             await ctx.send(
-                f"⏳ Tu dois attendre encore **{minutes}m {seconds}s** avant de pouvoir utiliser `!draw` à nouveau.",
+                f"⏳ You need to wait **{minutes}m {seconds}s** before using `!draw` again ! .",
                 delete_after=10
             )
 
