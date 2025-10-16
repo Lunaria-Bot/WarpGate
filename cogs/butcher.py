@@ -3,7 +3,7 @@ from discord.ext import commands
 from discord.ui import View, Button, Select, Modal, TextInput
 import random
 
-# --- Butcher Quotes ---
+# --- Quotes ---
 BUTCHER_QUOTES = [
     "Some cuts take a little more patience… but they’re worth it in the end.",
     "Takes a steady hand to separate what stays… and what goes.",
@@ -72,6 +72,51 @@ class QuantityModal(Modal, title="Butcher"):
             ephemeral=True
         )
 
+# --- View for Butchering ---
+class ButcheringView(View):
+    def __init__(self, bot, author, cards):
+        super().__init__(timeout=60)
+        self.bot = bot
+        self.author = author
+
+        options = [
+            discord.SelectOption(
+                label=f"{c['name']} ({c['rarity'].capitalize()}) x{c['quantity']}",
+                value=str(c['card_id'])
+            )
+            for c in cards
+        ]
+
+        select = Select(placeholder="Choose a card to butcher", options=options, min_values=1, max_values=1)
+        select.callback = self.select_callback
+        self.add_item(select)
+
+        leave_btn = Button(label="🚪 Leave the shop", style=discord.ButtonStyle.secondary)
+        leave_btn.callback = self.leave_shop
+        self.add_item(leave_btn)
+
+    async def select_callback(self, interaction: discord.Interaction):
+        card_id = int(interaction.data["values"][0])
+        async with self.bot.db.acquire() as conn:
+            card = await conn.fetchrow("""
+                SELECT uc.card_id, uc.quantity, c.name, c.rarity
+                FROM user_cards uc
+                JOIN cards c ON c.card_id = uc.card_id
+                WHERE uc.user_id = $1 AND uc.card_id = $2
+            """, interaction.user.id, card_id)
+        value = BURN_VALUES.get(card["rarity"], 0)
+        await interaction.response.send_modal(QuantityModal(self.bot, card, value))
+
+    async def leave_shop(self, interaction: discord.Interaction):
+        quote = random.choice(BUTCHER_QUOTES)
+        embed = discord.Embed(
+            title="🥩 The Butcher",
+            description=f"_{quote}_\n\nWelcome back, {interaction.user.display_name}...",
+            color=discord.Color.dark_red()
+        )
+        embed.set_image(url=BUTCHER_IMAGE)
+        await interaction.response.edit_message(embed=embed, view=ButcherView(self.bot, self.author))
+
 # --- Main View ---
 class ButcherView(View):
     def __init__(self, bot, author):
@@ -92,10 +137,6 @@ class ButcherView(View):
         self.add_item(leave_btn)
 
     async def show_value(self, interaction: discord.Interaction):
-        if interaction.user != self.author:
-            await interaction.response.send_message("⚠️ This menu is not for you.", ephemeral=True)
-            return
-
         embed = discord.Embed(
             title="📖 Conversion Values",
             description="\n".join([f"**1 {r.capitalize()}** = 💰 {v} Bloodcoins" for r, v in BURN_VALUES.items()]),
@@ -105,10 +146,6 @@ class ButcherView(View):
         await interaction.response.edit_message(embed=embed, view=self)
 
     async def show_butchering(self, interaction: discord.Interaction):
-        if interaction.user != self.author:
-            await interaction.response.send_message("⚠️ This menu is not for you.", ephemeral=True)
-            return
-
         async with self.bot.db.acquire() as conn:
             cards = await conn.fetch("""
                 SELECT uc.card_id, uc.quantity, c.name, c.rarity
@@ -121,40 +158,15 @@ class ButcherView(View):
             await interaction.response.send_message("⚠️ You have no cards to butcher.", ephemeral=True)
             return
 
-        options = [
-            discord.SelectOption(
-                label=f"{c['name']} ({c['rarity'].capitalize()}) x{c['quantity']}",
-                value=str(c['card_id'])
-            )
-            for c in cards
-        ]
-
-        select = Select(placeholder="Choose a card to butcher", options=options, min_values=1, max_values=1)
-
-        async def select_callback(inter: discord.Interaction):
-            card_id = int(select.values[0])
-            card = next(c for c in cards if c["card_id"] == card_id)
-            value = BURN_VALUES.get(card["rarity"], 0)
-
-            await inter.response.send_modal(QuantityModal(self.bot, card, value))
-
-        select.callback = select_callback
-        view = ButcherView(self.bot, self.author)  # réutilise la vue avec Leave
-        view.add_item(select)
-
         embed = discord.Embed(
             title="🔪 Butchering",
-            description="How many copies you want to sell to the butcher.",
+            description="Choose a card and enter how many copies you want to butcher.",
             color=discord.Color.dark_red()
         )
         embed.set_image(url=BUTCHER_IMAGE)
-        await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.response.edit_message(embed=embed, view=ButcheringView(self.bot, self.author, cards))
 
     async def leave_shop(self, interaction: discord.Interaction):
-        if interaction.user != self.author:
-            await interaction.response.send_message("⚠️ This menu is not for you.", ephemeral=True)
-            return
-
         quote = random.choice(BUTCHER_QUOTES)
         embed = discord.Embed(
             title="🥩 The Butcher",
@@ -162,7 +174,7 @@ class ButcherView(View):
             color=discord.Color.dark_red()
         )
         embed.set_image(url=BUTCHER_IMAGE)
-        await interaction.response.edit_message(embed=embed, view=self)
+        await interaction.response.edit_message(embed=embed, view=ButcherView(self.bot, self.author))
 
 # --- Cog ---
 class Butcher(commands.Cog):
