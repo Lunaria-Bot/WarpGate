@@ -2,6 +2,13 @@ import discord
 from discord.ext import commands
 from .entities import entity_from_db
 
+RARITY_COLORS = {
+    "common": discord.Color.light_gray(),
+    "rare": discord.Color.blue(),
+    "epic": discord.Color.purple(),
+    "legendary": discord.Color.gold()
+}
+
 class Buddy(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -44,12 +51,12 @@ class Buddy(commands.Cog):
                 return
 
             card = await conn.fetchrow("""
-                SELECT c.card_id, c.*, uc.health AS u_health, uc.attack AS u_attack, uc.speed AS u_speed
+                SELECT c.card_id, c.*, uc.health AS u_health, uc.attack AS u_attack, uc.speed AS u_speed, uc.quantity
                 FROM user_cards uc
                 JOIN cards c ON uc.card_id = c.card_id
                 WHERE uc.user_id = $1
-                AND c.name ILIKE $2
-                AND c.rarity ILIKE $3
+                  AND (LOWER(c.base_name) = LOWER($2) OR LOWER(c.name) = LOWER($2))
+                  AND c.rarity ILIKE $3
             """, ctx.author.id, card_name, rarity)
 
             if not card:
@@ -63,7 +70,25 @@ class Buddy(commands.Cog):
                 WHERE user_id = $2
             """, card["card_id"], ctx.author.id)
 
-        await ctx.send(f"✅ Your new Buddy is **{card['name']} ({card['rarity'].capitalize()})** !")
+        # Build entity for confirmation embed
+        entity = entity_from_db(
+            card,
+            user_card_row={"health": card["u_health"], "attack": card["u_attack"], "speed": card["u_speed"]}
+        )
+
+        embed = discord.Embed(
+            title=f"✅ Buddy set: {card['name']} ({card['rarity'].capitalize()})",
+            description=card["description"] or "No description available.",
+            color=RARITY_COLORS.get(card["rarity"], discord.Color.dark_gray())
+        )
+        embed.add_field(name="Rarity", value=card["rarity"].capitalize(), inline=True)
+        embed.add_field(name="Quantity", value=str(card["quantity"]), inline=True)
+        embed.add_field(name="Stats", value=str(entity.stats), inline=False)
+
+        if card["image_url"]:
+            embed.set_thumbnail(url=card["image_url"])
+
+        await ctx.send(embed=embed)
 
 
 async def setup(bot):
