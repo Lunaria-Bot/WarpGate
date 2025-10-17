@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+from .entities import entity_from_db  # uses stat hierarchy: user_cards > cards > rarity base
 
 # Upgrade rules: cost in Bloodcoins + copies required
 UPGRADE_RULES = {
@@ -43,9 +44,6 @@ class Upgrade(commands.Cog):
         """
         user_id = int(ctx.author.id)
 
-        # Valid rarities
-        valid_rarities = ["common", "rare", "epic", "legendary"]
-
         # Split into card name + rarity
         parts = args.rsplit(" ", 1)
         if len(parts) != 2:
@@ -59,8 +57,11 @@ class Upgrade(commands.Cog):
             await ctx.send("⚠️ This rarity cannot be upgraded (or is invalid).")
             return
 
+        rule = UPGRADE_RULES[rarity]
+        next_rarity = rule["next"]
+
         async with self.bot.db.acquire() as conn:
-            # 1. Check user balance
+            # 1) Check user balance
             balance = await conn.fetchval(
                 "SELECT bloodcoins FROM users WHERE user_id = $1", user_id
             )
@@ -68,9 +69,12 @@ class Upgrade(commands.Cog):
                 await ctx.send("⚠️ You don't have a profile yet.")
                 return
 
-            # 2. Fetch current card
+            # 2) Fetch current card + stats (cards & user_cards overrides)
             card = await conn.fetchrow("""
-                SELECT uc.quantity, c.card_id, c.name, c.rarity, c.base_name
+                SELECT uc.quantity,
+                       c.card_id, c.name, c.rarity, c.base_name, c.image_url, c.description, c.potential,
+                       c.health, c.attack, c.speed,
+                       uc.health AS u_health, uc.attack AS u_attack, uc.speed AS u_speed
                 FROM user_cards uc
                 JOIN cards c ON c.card_id = uc.card_id
                 WHERE uc.user_id = $1
@@ -82,10 +86,13 @@ class Upgrade(commands.Cog):
                 await ctx.send(f"⚠️ You don't own {base_name} ({rarity.capitalize()}).")
                 return
 
-            rule = UPGRADE_RULES[rarity]
-            next_rarity = rule["next"]
+            # Build entity for old stats (effective)
+            old_entity = entity_from_db(card, {
+                "health": card["u_health"], "attack": card["u_attack"], "speed": card["u_speed"]
+            })
+            old_h, old_a, old_s = old_entity.stats.health, old_entity.stats.attack, old_entity.stats.speed
 
-            # 3. Check requirements
+            # 3) Check requirements
             if balance < rule["cost"]:
                 await ctx.send(f"❌ You need {rule['cost']} BloodCoins to upgrade.")
                 return
@@ -93,18 +100,24 @@ class Upgrade(commands.Cog):
                 await ctx.send(f"❌ You need {rule['copies']} copies of this card to upgrade.")
                 return
 
-            # 4. Fetch upgraded version
+            # 4) Fetch upgraded version with stats
             next_card = await conn.fetchrow("""
-                SELECT card_id, name, rarity, image_url, description, potential
+                SELECT card_id, name, rarity, image_url, description, potential,
+                       health, attack, speed
                 FROM cards
                 WHERE base_name = $1 AND rarity = $2
+                LIMIT 1
             """, card["base_name"], next_rarity)
 
             if not next_card:
                 await ctx.send(f"⚠️ No upgraded version found for {card['name']} → {next_rarity}.")
                 return
 
-            # 5. Transaction: remove coins + copies, add upgraded card
+            # Build entity for new stats (effective; user_cards overrides won't exist yet)
+            new_entity = entity_from_db(next_card)
+            new_h, new_a, new_s = new_entity.stats.health, new_entity.stats.attack, new_entity.stats.speed
+
+            # 5) Transaction: remove coins + copies, add upgraded card
             async with conn.transaction():
                 await conn.execute(
                     "UPDATE users SET bloodcoins = bloodcoins - $1 WHERE user_id = $2",
@@ -126,7 +139,7 @@ class Upgrade(commands.Cog):
                 await update_quest_progress(conn, user_id, "Upgrade 2 cards", 1)
                 await update_quest_progress(conn, user_id, "Upgrade 10 cards", 1)
 
-        # 6. Confirmation embed
+        # 6) Confirmation embed with stats comparison
         potential = int(next_card["potential"]) if next_card["potential"] is not None else 0
 
         embed = discord.Embed(
@@ -136,7 +149,19 @@ class Upgrade(commands.Cog):
         )
         embed.add_field(name="Cost", value=f"{rule['cost']} BloodCoins", inline=True)
         embed.add_field(name="Copies Used", value=str(rule["copies"]), inline=True)
-        embed.add_field(name="New Potential", value="⭐" * potential, inline=True)
+        embed.add_field(name="New Potential", value=("⭐" * potential) if potential > 0 else "—", inline=True)
+
+        # Stats comparison
+        stats_before = f"❤️ {old_h} | 🗡️ {old_a} | ⚡ {old_s}"
+        stats_after  = f"❤️ {new_h} | 🗡️ {new_a} | ⚡ {new_s}"
+        delta_h = new_h - old_h
+        delta_a = new_a - old_a
+        delta_s = new_s - old_s
+        stats_delta = f"+❤️ {delta_h} | +🗡️ {delta_a} | +⚡ {delta_s}"
+
+        embed.add_field(name="Stats before", value=stats_before, inline=False)
+        embed.add_field(name="Stats after", value=stats_after, inline=False)
+        embed.add_field(name="Change", value=stats_delta, inline=False)
 
         if next_card["image_url"]:
             embed.set_thumbnail(url=next_card["image_url"])
