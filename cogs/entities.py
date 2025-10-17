@@ -1,6 +1,6 @@
 import discord
 
-# --- Base stats par rareté (fallback si rien en DB) ---
+# --- Base stats by rarity (fallback if nothing in DB) ---
 RARITY_BASE_STATS = {
     "common":    {"health": 10, "attack": 5,  "speed": 5},
     "rare":      {"health": 20, "attack": 8,  "speed": 7},
@@ -23,11 +23,11 @@ class Entity:
                  image_url: str = None, description: str = None,
                  override_stats: dict = None):
         """
-        - name: nom de l'entité (carte ou monstre)
-        - rarity: rareté (common, rare, epic, legendary)
-        - image_url: image associée
-        - description: texte descriptif
-        - override_stats: dict optionnel pour remplacer les stats par défaut
+        - name: entity name (card or monster)
+        - rarity: rarity (common, rare, epic, legendary)
+        - image_url: associated image
+        - description: descriptive text
+        - override_stats: optional dict to override default stats
         """
         base = RARITY_BASE_STATS.get(rarity.lower(), RARITY_BASE_STATS["common"])
         if override_stats:
@@ -42,7 +42,7 @@ class Entity:
         return self.stats.health > 0
 
     def attack_target(self, target: "Entity") -> int:
-        """Inflige des dégâts à une autre entité."""
+        """Deals damage to another entity."""
         damage = self.stats.attack
         target.stats.health = max(0, target.stats.health - damage)
         return damage
@@ -60,18 +60,18 @@ class Entity:
         return embed
 
 
-# --- Fabrique d'entité depuis la DB ---
+# --- Factory to build an Entity from DB rows ---
 def entity_from_db(card_row, user_card_row=None):
     """
-    Construit une Entity à partir d'une ligne SQL.
-    Priorité des stats :
-    1. user_cards (si défini)
-    2. cards (si défini)
+    Build an Entity from a SQL row.
+    Stat priority:
+    1. user_cards (if defined)
+    2. cards (if defined)
     3. RARITY_BASE_STATS
     """
     override_stats = {}
 
-    # Niveau user_cards (si fourni)
+    # From user_cards (if provided)
     if user_card_row:
         if user_card_row.get("health") is not None:
             override_stats["health"] = user_card_row["health"]
@@ -80,7 +80,7 @@ def entity_from_db(card_row, user_card_row=None):
         if user_card_row.get("speed") is not None:
             override_stats["speed"] = user_card_row["speed"]
 
-    # Niveau cards
+    # From cards
     if not override_stats:
         if card_row.get("health") is not None:
             override_stats["health"] = card_row["health"]
