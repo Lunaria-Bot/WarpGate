@@ -44,7 +44,8 @@ async def main():
         "cogs.cooldown_reset",
         "cogs.daily",
         "cogs.quests",
-        "cogs.butcher"
+        "cogs.butcher",
+        "cogs.buddy"
     ]
 
     for ext in extensions:
