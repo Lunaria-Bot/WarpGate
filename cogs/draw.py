@@ -2,117 +2,127 @@ import discord
 from discord.ext import commands
 import asyncio
 import random
+from .entities import entity_from_db, Entity
 
-RARITY_COLORS = {
-    "common": discord.Color.light_gray(),
-    "rare": discord.Color.blue(),
-    "epic": discord.Color.purple(),
-    "legendary": discord.Color.gold()
-}
-
-# --- Mimic data ---
 MIMIC_QUOTES = [
     "Treasure? Oh no, I’m the real reward.",
     "Curiosity tastes almost as good as fear.",
     "Funny how you never suspect the things you want most."
 ]
 
-MIMIC_IMAGE = "https://media.discordapp.net/attachments/1428401795364814948/1428401824024756316/image.png?format=webp&quality=lossless&width=880&height=493"
-
-# --- Helper: update quest progress ---
-async def update_quest_progress(conn, user_id: int, quest_desc: str, amount: int = 1):
-    """Increment quest progress for a given quest description."""
-    await conn.execute("""
-        UPDATE user_quests uq
-        SET progress = progress + $3,
-            completed = (progress + $3) >= qt.target
-        FROM quest_templates qt
-        WHERE uq.quest_id = qt.quest_id
-          AND uq.user_id = $1
-          AND qt.description = $2
-          AND uq.claimed = FALSE
-    """, user_id, quest_desc, amount)
-
+MIMIC_IMAGE = "https://media.discordapp.net/attachments/.../mimic.png"
 
 class Draw(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     @commands.command(name="draw")
-    @commands.cooldown(1, 600, commands.BucketType.user)  # 1 utilisation toutes les 600s (10 min) par joueur
+    @commands.cooldown(1, 600, commands.BucketType.user)
     async def draw(self, ctx):
-        """Draw a card with a 10% chance of encountering a Mimic instead.
-        +10 Bloodcoins per draw, updates quest progress, 10 min cooldown per user.
-        """
-        # 1. Animation GIF
-        embed = discord.Embed(description="🎴 Drawing in progress...")
-        embed.set_image(
-            url="https://media.discordapp.net/attachments/1390792811380478032/1428014081927024734/AZnoEBWwS3YhAlSY-j6uUA-AZnoEBWw4TsWJ2XCcPMwOQ.gif"
-        )
-        anim_msg = await ctx.send(embed=embed)
-
+        msg = await ctx.send("🎴 Drawing...")
         await asyncio.sleep(2)
 
-        # 2. Check Mimic encounter (10%)
+        # --- 10% chance Mimic ---
         if random.randint(1, 100) <= 10:
-            quote = random.choice(MIMIC_QUOTES)
-            mimic_embed = discord.Embed(
-                title="👾 A wild Mimic appears!",
-                description=f"_{quote}_\n\nAs you saw him you ran away (Update coming soon)",
-                color=discord.Color.dark_red()
+            # Get player's Buddy
+            async with self.bot.db.acquire() as conn:
+                buddy = await conn.fetchrow("""
+                    SELECT c.*, uc.health AS u_health, uc.attack AS u_attack, uc.speed AS u_speed
+                    FROM users u
+                    JOIN cards c ON u.buddy_card_id = c.card_id
+                    LEFT JOIN user_cards uc ON uc.card_id = c.card_id AND uc.user_id = u.user_id
+                    WHERE u.user_id = $1
+                """, ctx.author.id)
+
+            if buddy:
+                player = entity_from_db(
+                    buddy,
+                    user_card_row={"health": buddy["u_health"], "attack": buddy["u_attack"], "speed": buddy["u_speed"]}
+                )
+                player.description = f"Buddy of {ctx.author.display_name}"
+            else:
+                player = Entity(ctx.author.display_name, rarity="common", description="Adventurer without buddy")
+
+            # Create Mimic
+            mimic = Entity("Mimic", rarity="epic",
+                           image_url=MIMIC_IMAGE,
+                           description=random.choice(MIMIC_QUOTES),
+                           override_stats={"health": 60, "attack": 15, "speed": 6})
+
+            log = [f"👾 {mimic.name} appears!"]
+
+            # Determine who starts
+            turn_order = [player, mimic] if player.stats.speed >= mimic.stats.speed else [mimic, player]
+
+            # Auto battle
+            while player.is_alive() and mimic.is_alive():
+                attacker, defender = turn_order
+                dmg = attacker.attack_target(defender)
+                log.append(f"**{attacker.name}** attacks → deals {dmg} damage to **{defender.name}** "
+                           f"(Remaining HP: {defender.stats.health})")
+                turn_order.reverse()
+
+            winner = player if player.is_alive() else mimic
+            log.append(f"🏆 **{winner.name}** wins the battle!")
+
+            reward_embed = None
+            if winner == player:
+                async with self.bot.db.acquire() as conn:
+                    # +50 Bloodcoins
+                    await conn.execute("""
+                        UPDATE users
+                        SET bloodcoins = bloodcoins + 50
+                        WHERE user_id = $1
+                    """, ctx.author.id)
+
+                    # Rarity roll
+                    roll = random.random() * 100
+                    if roll <= 90:
+                        rarity = "rare"
+                    elif roll <= 99.5:
+                        rarity = "epic"
+                    else:
+                        rarity = "legendary"
+
+                    # Draw a card of that rarity
+                    card = await conn.fetchrow("""
+                        SELECT *
+                        FROM cards
+                        WHERE rarity = $1
+                        ORDER BY random()
+                        LIMIT 1
+                    """, rarity)
+
+                reward_entity = entity_from_db(card)
+                reward_embed = reward_entity.to_embed(title_prefix="🎁 Reward obtained:")
+                reward_embed.description = f"You won **50 Bloodcoins** and a **{rarity.capitalize()}** card!"
+
+            # Final combat embed
+            combat_embed = discord.Embed(
+                title="⚔️ Battle against the Mimic",
+                description="\n".join(log),
+                color=discord.Color.red()
             )
-            mimic_embed.set_image(url=MIMIC_IMAGE)
-            await anim_msg.edit(embed=mimic_embed, content=None, attachments=[])
+            if mimic.image_url:
+                combat_embed.set_thumbnail(url=mimic.image_url)
+
+            await msg.edit(content=None, embed=combat_embed)
+            if reward_embed:
+                await ctx.send(embed=reward_embed)
             return
 
-        # 3. Normal draw logic
-        user_id = int(ctx.author.id)
-
+        # --- Otherwise, normal draw ---
         async with self.bot.db.acquire() as conn:
             card = await conn.fetchrow("""
-                SELECT card_id, base_name, name, rarity, potential, image_url, description
+                SELECT *
                 FROM cards
                 WHERE rarity = 'common'
                 ORDER BY random()
                 LIMIT 1
             """)
 
-            if not card:
-                await anim_msg.edit(content="⚠️ No common cards available in the database.")
-                return
-
-            await conn.execute("""
-                INSERT INTO user_cards (user_id, card_id, quantity)
-                VALUES ($1, $2, 1)
-                ON CONFLICT (user_id, card_id)
-                DO UPDATE SET quantity = user_cards.quantity + 1
-            """, user_id, card["card_id"])
-
-            await conn.execute("""
-                UPDATE users
-                SET bloodcoins = bloodcoins + 10
-                WHERE user_id = $1
-            """, user_id)
-
-            await update_quest_progress(conn, user_id, "Draw 5 times", 1)
-            await update_quest_progress(conn, user_id, "Draw 10 times", 1)
-            await update_quest_progress(conn, user_id, "Draw 100 times", 1)
-
-        rarity = card["rarity"]
-        potential = int(card["potential"]) if card["potential"] is not None else 0
-
-        result_embed = discord.Embed(
-            title=f"✨ You drew: {card['name']} ✨",
-            description=card["description"] or "No description available.",
-            color=RARITY_COLORS.get(rarity, discord.Color.dark_gray())
-        )
-        result_embed.add_field(name="Rarity", value=rarity.capitalize(), inline=True)
-        result_embed.add_field(name="Potential", value="⭐" * potential, inline=True)
-
-        if card["image_url"]:
-            result_embed.set_thumbnail(url=card["image_url"])
-
-        await anim_msg.edit(content=None, attachments=[], embed=result_embed)
+        entity = entity_from_db(card)
+        await msg.edit(content=None, embed=entity.to_embed())
 
     @draw.error
     async def draw_error(self, ctx, error):
@@ -120,7 +130,7 @@ class Draw(commands.Cog):
             minutes = int(error.retry_after // 60)
             seconds = int(error.retry_after % 60)
             await ctx.send(
-                f"⏳ You need to wait **{minutes}m {seconds}s** before using `!draw` again ! .",
+                f"⏳ You must wait **{minutes}m {seconds}s** before using `!draw` again.",
                 delete_after=10
             )
 
