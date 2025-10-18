@@ -1,4 +1,5 @@
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 RARITY_EMOJIS = {
@@ -8,18 +9,77 @@ RARITY_EMOJIS = {
     "legendary": "🟡"
 }
 
-class Profile(commands.Cog):
-    def __init__(self, bot):
+
+class ProfileView(discord.ui.View):
+    def __init__(self, user: discord.Member, bot: commands.Bot):
+        super().__init__(timeout=60)
+        self.user = user
         self.bot = bot
 
-    @commands.command(name="profile")
-    async def profile(self, ctx, member: discord.Member = None):
-        """Show the profile of a user (default: yourself)."""
-        user = member or ctx.author
-        user_id = int(user.id)  # ✅ force int
+    @discord.ui.button(label="📦 Inventory", style=discord.ButtonStyle.primary)
+    async def inventory_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.user:
+            await interaction.response.send_message("⚠️ This isn’t your profile.", ephemeral=True)
+            return
+
+        cog = self.bot.get_cog("Inventory")
+        if cog:
+            ctx = await commands.Context.from_interaction(interaction)
+            await cog.inventory(ctx)
+        else:
+            await interaction.response.send_message("⚠️ Inventory system not loaded.", ephemeral=True)
+
+    @discord.ui.button(label="📜 Quests", style=discord.ButtonStyle.secondary)
+    async def quests_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.user:
+            await interaction.response.send_message("⚠️ This isn’t your profile.", ephemeral=True)
+            return
+
+        cog = self.bot.get_cog("Quests")
+        if cog:
+            ctx = await commands.Context.from_interaction(interaction)
+            await cog.quests(ctx)
+        else:
+            await interaction.response.send_message("⚠️ Quest system not loaded.", ephemeral=True)
+
+    @discord.ui.button(label="📊 Stats", style=discord.ButtonStyle.success)
+    async def stats_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.user:
+            await interaction.response.send_message("⚠️ This isn’t your profile.", ephemeral=True)
+            return
 
         async with self.bot.db.acquire() as conn:
-            # 1. Fetch user data
+            totals = await conn.fetchrow("""
+                SELECT 
+                    COALESCE(SUM(c.health * uc.quantity), 0) AS total_health,
+                    COALESCE(SUM(c.attack * uc.quantity), 0) AS total_attack,
+                    COALESCE(SUM(c.speed * uc.quantity), 0) AS total_speed
+                FROM user_cards uc
+                JOIN cards c ON c.card_id = uc.card_id
+                WHERE uc.user_id = $1
+            """, self.user.id)
+
+        embed = discord.Embed(
+            title=f"📊 {self.user.display_name}'s Aggregate Stats",
+            color=discord.Color.green()
+        )
+        embed.add_field(name="❤️ Total Health", value=str(totals["total_health"]), inline=True)
+        embed.add_field(name="🗡️ Total Attack", value=str(totals["total_attack"]), inline=True)
+        embed.add_field(name="⚡ Total Speed", value=str(totals["total_speed"]), inline=True)
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+class Profile(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+
+    @app_commands.command(name="profile", description="Show your profile or another user's profile")
+    async def profile(self, interaction: discord.Interaction, member: discord.Member | None = None):
+        user = member or interaction.user
+        user_id = int(user.id)
+
+        async with self.bot.db.acquire() as conn:
             profile = await conn.fetchrow("""
                 SELECT user_id, bloodcoins, created_at, updated_at
                 FROM users
@@ -27,10 +87,9 @@ class Profile(commands.Cog):
             """, user_id)
 
             if not profile:
-                await ctx.send("⚠️ This user does not have a profile yet.")
+                await interaction.response.send_message("⚠️ This user does not have a profile yet.", ephemeral=True)
                 return
 
-            # 2. Fetch card collection stats
             stats = await conn.fetchrow("""
                 SELECT 
                     COUNT(*) AS total,
@@ -43,46 +102,37 @@ class Profile(commands.Cog):
                 WHERE uc.user_id = $1
             """, user_id)
 
-        # 3. Build embed
         embed = discord.Embed(
-            title=f"👤 Profile of {user.display_name}",
-            color=discord.Color.blue()
+            title=f"👤 {user.display_name}'s Profile",
+            color=discord.Color.gold() if stats["legendaries"] else discord.Color.blurple()
         )
         embed.set_thumbnail(url=user.display_avatar.url)
 
-        embed.add_field(
-            name="💰 Balance",
-            value=f"{profile['bloodcoins']:,} BloodCoins",
-            inline=False
+        embed.add_field(name="💰 Balance", value=f"{profile['bloodcoins']:,} BloodCoins", inline=True)
+        embed.add_field(name="📅 Joined", value=profile["created_at"].strftime("%d %b %Y"), inline=True)
+
+        if profile["updated_at"]:
+            embed.add_field(name="🔄 Last Update", value=profile["updated_at"].strftime("%d %b %Y"), inline=True)
+
+        collection = (
+            f"**Total:** {stats['total'] or 0}\n"
+            f"{RARITY_EMOJIS['common']} {stats['commons'] or 0} | "
+            f"{RARITY_EMOJIS['rare']} {stats['rares'] or 0} | "
+            f"{RARITY_EMOJIS['epic']} {stats['epics'] or 0} | "
+            f"{RARITY_EMOJIS['legendary']} {stats['legendaries'] or 0}"
         )
+        embed.add_field(name="🃏 Collection", value=collection, inline=False)
 
-        embed.add_field(
-            name="🃏 Card Collection",
-            value=(
-                f"**Total:** {stats['total'] or 0}\n"
-                f"{RARITY_EMOJIS['common']} Commons: {stats['commons'] or 0}\n"
-                f"{RARITY_EMOJIS['rare']} Rares: {stats['rares'] or 0}\n"
-                f"{RARITY_EMOJIS['epic']} Epics: {stats['epics'] or 0}\n"
-                f"{RARITY_EMOJIS['legendary']} Legendaries: {stats['legendaries'] or 0}"
-            ),
-            inline=False
-        )
+        achievements = []
+        if stats["legendaries"]:
+            achievements.append("🏆 Legendary Owner")
+        if profile["bloodcoins"] > 100000:
+            achievements.append("💎 Wealthy")
+        embed.add_field(name="🎖️ Achievements", value=", ".join(achievements) or "—", inline=False)
 
-        embed.add_field(
-            name="📅 Joined",
-            value=profile["created_at"].strftime("%d %B %Y"),
-            inline=True
-        )
-
-        if "updated_at" in profile and profile["updated_at"]:
-            embed.add_field(
-                name="🔄 Last Update",
-                value=profile["updated_at"].strftime("%d %B %Y"),
-                inline=True
-            )
-
-        await ctx.send(embed=embed)
+        view = ProfileView(user, self.bot)
+        await interaction.response.send_message(embed=embed, view=view)
 
 
-async def setup(bot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(Profile(bot))
