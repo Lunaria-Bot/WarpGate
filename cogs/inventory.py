@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord.ui import View, Button, Select
 from typing import Optional
-from .entities import entity_from_db, RARITY_BASE_STATS
+from .entities import entity_from_db
 
 # Shared rarity constants
 RARITY_COLORS: dict[str, discord.Color] = {
@@ -206,12 +206,11 @@ class Inventory(commands.Cog):
 
             balance = await conn.fetchval("SELECT bloodcoins FROM users WHERE user_id = $1", user_id)
 
-            if not rows:
+        if not rows:
             await ctx.send("📭 Your inventory is empty. Use `!draw` to get cards!")
             return
 
         view = InventoryView(rows, balance, ctx.author)
-        # keep a reference so on_timeout can disable controls
         message = await ctx.send(embed=view.format_page(), view=view)
         view.message = message
 
