@@ -206,7 +206,7 @@ class Inventory(commands.Cog):
 
             balance = await conn.fetchval("SELECT bloodcoins FROM users WHERE user_id = $1", user_id)
 
-                if not rows:
+            if not rows:
             await ctx.send("📭 Your inventory is empty. Use `!draw` to get cards!")
             return
 
