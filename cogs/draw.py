@@ -219,8 +219,8 @@ class Warp(commands.Cog):
             value=f"❤️ {entity.stats.health} | 🗡️ {entity.stats.attack} | ⚡ {entity.stats.speed}",
             inline=False
         )
-        if card["image_url"]:
-        result_embed.set_image(url=card["image_url"])
+             if card["image_url"]:
+            result_embed.set_image(url=card["image_url"])
 
         await msg.edit(content=None, attachments=[], embed=result_embed)
 
@@ -229,8 +229,15 @@ class Warp(commands.Cog):
         if leveled_up:
             await ctx.send(f"🎉 {ctx.author.mention} leveled up to **Level {new_level}**!")
 
-    @draw.error
-    async def draw_error(self, ctx, error):
+        # Reminder automatique
+        async def reminder():
+            await asyncio.sleep(cooldown_seconds)
+            await ctx.send(f"🔔 {ctx.author.mention} ton **Warp** est de nouveau disponible !")
+
+        self.bot.loop.create_task(reminder())
+
+    @warp.error
+    async def warp_error(self, ctx, error):
         if isinstance(error, commands.CommandOnCooldown):
             minutes = int(error.retry_after // 60)
             seconds = int(error.retry_after % 60)
@@ -239,9 +246,26 @@ class Warp(commands.Cog):
                 delete_after=10
             )
         else:
-            await ctx.send("⚠️ An unexpected error occurred while processing your draw.", delete_after=10)
+            await ctx.send("⚠️ An unexpected error occurred while processing your warp.", delete_after=10)
+
+    @commands.command(name="cooldown")
+    async def cooldown(self, ctx):
+        user_id = ctx.author.id
+        now = int(time.time())
+
+        # Daily reset à minuit UTC
+        tomorrow_midnight = (now // 86400 + 1) * 86400
+        daily_ready = tomorrow_midnight
+
+        # Warp basé sur cooldown dict
+        warp_ready = self.cooldowns.get(user_id, now)
+
+        embed = discord.Embed(title="⏳ Cooldowns", color=discord.Color.blurple())
+        embed.add_field(name="Daily", value=f"<t:{daily_ready}:R>", inline=False)
+        embed.add_field(name="Warp", value=f"<t:{warp_ready}:R>", inline=False)
+
+        await ctx.send(embed=embed)
 
 
 async def setup(bot):
-    await bot.add_cog(Draw(bot))
-
+    await bot.add_cog(Warp(bot))
