@@ -109,7 +109,7 @@ class InventoryView(discord.ui.View):
         self.author = author
         self.current_rarity = "all"
         self.page = 0
-        self.per_page = 10
+        self.per_page = 9  # 9 cards per page, visually 3x3 grid when inline fields wrap
         self.message: Optional[discord.Message] = None
 
         self.add_item(RaritySelect(self))
@@ -163,14 +163,16 @@ class InventoryView(discord.ui.View):
             })
             potential_val = int(c["potential"]) if c["potential"] else 0
             rarity = c["rarity"]
+
+            value = (
+                f"Qty: **{c['quantity']}**\n"
+                f"{format_stats(entity)}\n"
+                f"Potential: {('⭐' * potential_val) if potential_val > 0 else '—'}"
+            )
             embed.add_field(
                 name=f"{RARITY_EMOJIS.get(rarity,'')} {c['base_name']} ({rarity.capitalize()})",
-                value=(
-                    f"Qty: **{c['quantity']}**\n"
-                    f"{format_stats(entity)}\n"
-                    f"Potential: {('⭐' * potential_val) if potential_val > 0 else '—'}"
-                ),
-                inline=False
+                value=value,
+                inline=True  # inline fields = wider layout
             )
         return embed
 
