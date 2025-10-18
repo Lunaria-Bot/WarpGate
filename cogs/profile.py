@@ -26,7 +26,7 @@ class Profile(commands.Cog):
             """, user_id)
 
             if not profile:
-                await ctx.send("⚠️ Cet utilisateur n’a pas encore de profil.")
+                await ctx.send("⚠️ This user does not have a profile yet.")
                 return
 
             stats = await conn.fetchrow("""
@@ -49,9 +49,9 @@ class Profile(commands.Cog):
                     WHERE card_id = $1
                 """, profile["buddy_card_id"])
 
-        # Embed
+        # --- Embed ---
         embed = discord.Embed(
-            title=f"👤 Profil de {user.display_name}",
+            title=f"👤 Profile of {user.display_name}",
             color=discord.Color.gold() if (stats and stats["legendaries"]) else discord.Color.blurple()
         )
         embed.set_thumbnail(url=user.display_avatar.url)
@@ -67,16 +67,16 @@ class Profile(commands.Cog):
         progress = int((xp / xp_next) * 20) if xp_next else 0
         bar = "█" * progress + "░" * (20 - progress)
         embed.add_field(
-            name="📈 Niveau",
+            name="📈 Level",
             value=f"Lvl {level} | {xp}/{xp_next} XP\n`{bar}`",
             inline=False
         )
 
         # Dates
         if profile["created_at"]:
-            embed.add_field(name="📅 Créé le", value=profile["created_at"].strftime("%d %b %Y"), inline=True)
+            embed.add_field(name="📅 Created", value=profile["created_at"].strftime("%d %b %Y"), inline=True)
         if profile["updated_at"]:
-            embed.add_field(name="🔄 Dernière maj", value=profile["updated_at"].strftime("%d %b %Y"), inline=True)
+            embed.add_field(name="🔄 Last Update", value=profile["updated_at"].strftime("%d %b %Y"), inline=True)
 
         # Collection
         if stats:
@@ -89,7 +89,7 @@ class Profile(commands.Cog):
             )
             embed.add_field(name="🃏 Collection", value=collection, inline=False)
 
-        # Buddy (from cards)
+        # Buddy
         if buddy:
             embed.add_field(name="🐾 Buddy", value=buddy["name"], inline=False)
             if buddy["image_url"]:
@@ -100,10 +100,10 @@ class Profile(commands.Cog):
         if stats and stats["legendaries"]:
             achievements.append("🏆 Legendary Owner")
         if profile["bloodcoins"] > 100000:
-            achievements.append("💎 Riche")
+            achievements.append("💎 Wealthy")
         if level >= 10:
-            achievements.append("⭐ Niveau 10+")
-        embed.add_field(name="🎖️ Succès", value=", ".join(achievements) or "—", inline=False)
+            achievements.append("⭐ Level 10+")
+        embed.add_field(name="🎖️ Achievements", value=", ".join(achievements) or "—", inline=False)
 
         await ctx.send(embed=embed)
 
