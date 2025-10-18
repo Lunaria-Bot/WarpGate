@@ -1,4 +1,3 @@
-# bot.py
 import asyncio
 import discord
 from discord.ext import commands
@@ -15,10 +14,18 @@ bot = commands.Bot(command_prefix=settings.BOT_PREFIX, intents=intents)
 @bot.event
 async def on_ready():
     print(f"✅ Connecté en tant que {bot.user} (ID: {bot.user.id})")
-    print("📜 Commandes disponibles :")
+    print("📜 Commandes prefix disponibles :")
     for cmd in bot.commands:
         print(f" - {settings.BOT_PREFIX}{cmd.name}")
     print("Bot prêt à l’action !")
+
+    # --- Slash command sync ---
+    guild = discord.Object(id=1399784437440319508)
+    try:
+        synced = await bot.tree.sync(guild=guild)
+        print(f"✅ Synced {len(synced)} slash command(s) to guild {guild.id}")
+    except Exception as e:
+        print(f"❌ Error syncing commands: {e}")
 
 @bot.event
 async def on_command_error(ctx, error):
