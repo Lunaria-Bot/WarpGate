@@ -20,7 +20,8 @@ class Profile(commands.Cog):
         async with self.bot.db.acquire() as conn:
             profile = await conn.fetchrow("""
                 SELECT user_id, username, bloodcoins, noble_coins, level, xp, xp_next,
-                       created_at, updated_at, buddy_card_id, badges, equipment
+                       created_at, updated_at, buddy_card_id, badges, equipment,
+                       banned, ban_reason
                 FROM users
                 WHERE user_id = $1
             """, user_id)
@@ -78,6 +79,10 @@ class Profile(commands.Cog):
         if profile["updated_at"]:
             embed.add_field(name="🔄 Last Update", value=profile["updated_at"].strftime("%d %b %Y"), inline=True)
 
+        # Ban status
+        if profile["banned"]:
+            reason = profile["ban_reason"] or "No reason provided"
+            embed.add_field(name="⛔ Account Status", value=f"BANNED\nReason: {reason}", inline=False)
         # Collection
         if stats:
             collection = (
