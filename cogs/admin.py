@@ -5,6 +5,7 @@ class Admin(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    # --- Helper: admin check ---
     def admin_only():
         async def predicate(ctx):
             return ctx.author.guild_permissions.administrator
@@ -63,7 +64,7 @@ class Admin(commands.Cog):
     # --- Ban / Unban ---
     @commands.command(name="banplayer")
     @admin_only()
-    async def ban_player(self, ctx, member: discord.Member, reason: str = "No reason provided"):
+    async def ban_player(self, ctx, member: discord.Member, *, reason: str = "No reason provided"):
         """Ban a player (lock their account, prevent draw)."""
         async with self.bot.db.acquire() as conn:
             await conn.execute("""
@@ -94,8 +95,40 @@ class Admin(commands.Cog):
         if not profile_cog:
             await ctx.send("⚠️ Profile system not loaded.")
             return
-        # Reuse the profile command logic
         await profile_cog.profile(ctx, member=member)
+
+    # --- Give a specific card ---
+    @commands.command(name="givecard")
+    @admin_only()
+    async def give_card(self, ctx, member: discord.Member, rarity: str, *, card_name: str):
+        """
+        Give a specific card to a player.
+        Usage: !givecard @user <rarity> <card name>
+        Example: !givecard @Kyriun epic Dark Knight
+        """
+        async with self.bot.db.acquire() as conn:
+            # Find the card by name and rarity
+            card = await conn.fetchrow("""
+                SELECT card_id, name, rarity
+                FROM cards
+                WHERE (LOWER(base_name) = LOWER($1) OR LOWER(name) = LOWER($1))
+                  AND rarity ILIKE $2
+                LIMIT 1
+            """, card_name, rarity)
+
+            if not card:
+                await ctx.send(f"⚠️ No card found with name '{card_name}' and rarity '{rarity}'.")
+                return
+
+            # Insert or increment in user_cards
+            await conn.execute("""
+                INSERT INTO user_cards (user_id, card_id, quantity)
+                VALUES ($1, $2, 1)
+                ON CONFLICT (user_id, card_id)
+                DO UPDATE SET quantity = user_cards.quantity + 1
+            """, member.id, card["card_id"])
+
+        await ctx.send(f"✅ Gave **{card['name']}** ({card['rarity'].capitalize()}) to {member.display_name}.")
 
 
 async def setup(bot):
