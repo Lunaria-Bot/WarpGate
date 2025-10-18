@@ -9,6 +9,8 @@ RARITY_EMOJIS = {
     "legendary": "🟡"
 }
 
+GUILD_ID = 1399784437440319508  # Force register profile to this guild
+
 
 class ProfileView(discord.ui.View):
     def __init__(self, user: discord.Member, bot: commands.Bot):
@@ -74,6 +76,8 @@ class Profile(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+    # Force the command to this guild to guarantee registration
+    @app_commands.guilds(discord.Object(id=GUILD_ID))
     @app_commands.command(name="profile", description="Afficher ton profil ou celui d'un autre joueur")
     async def profile(self, interaction: discord.Interaction, member: discord.Member | None = None):
         user = member or interaction.user
@@ -132,6 +136,13 @@ class Profile(commands.Cog):
 
         view = ProfileView(user, self.bot)
         await interaction.response.send_message(embed=embed, view=view)
+
+    # Optional: log commands registered in this cog’s setup to debug
+    async def cog_load(self):
+        # After the cog is loaded, print the commands currently in the tree for this guild
+        cmds = await self.bot.tree.fetch_commands(guild=discord.Object(id=GUILD_ID))
+        names = [c.name for c in cmds]
+        print(f"[Profile] Commands in tree for guild {GUILD_ID}: {names}")
 
 
 async def setup(bot: commands.Bot):
