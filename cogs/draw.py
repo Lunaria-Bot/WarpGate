@@ -213,13 +213,17 @@ class Warp(commands.Cog):
             color=RARITY_COLORS.get(rarity, discord.Color.dark_gray())
         )
         result_embed.add_field(name="Rarity", value=rarity.capitalize(), inline=True)
-        result_embed.add_field(name="Potential", value=("⭐" * potential_val) if potential_val > 0 else "—", inline=True)
+        result_embed.add_field(
+            name="Potential",
+            value=("⭐" * potential_val) if potential_val > 0 else "—",
+            inline=True
+        )
         result_embed.add_field(
             name="Stats",
             value=f"❤️ {entity.stats.health} | 🗡️ {entity.stats.attack} | ⚡ {entity.stats.speed}",
             inline=False
         )
-             if card["image_url"]:
+        if card["image_url"]:
             result_embed.set_image(url=card["image_url"])
 
         await msg.edit(content=None, attachments=[], embed=result_embed)
