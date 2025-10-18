@@ -235,7 +235,7 @@ class Warp(commands.Cog):
             minutes = int(error.retry_after // 60)
             seconds = int(error.retry_after % 60)
             await ctx.send(
-                f"⏳ You need to wait **{minutes}m {seconds}s** before using `!draw` again!",
+                f"⏳ You need to wait **{minutes}m {seconds}s** before using `!warp` again!",
                 delete_after=10
             )
         else:
