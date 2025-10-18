@@ -137,10 +137,18 @@ class UpgradeSelect(Select):
             new_entity = entity_from_db(next_card)
 
             async with conn.transaction():
-                await conn.execute("UPDATE users SET bloodcoins = bloodcoins - $1 WHERE user_id = $2",
-                                   rule["cost"], self.user.id)
-                await conn.execute("UPDATE user_cards SET quantity = quantity - $1 WHERE user_id = $2 AND card_id = $3",
-                                   rule["copies"], self.user.id, card["card_id"])
+                # Check bypass flag
+                flags = await conn.fetchrow("SELECT bypass_upgrade FROM users WHERE user_id = $1", self.user.id)
+                bypass = flags and flags["bypass_upgrade"]
+
+                if not bypass:
+                    # Normal cost + copies
+                    await conn.execute("UPDATE users SET bloodcoins = bloodcoins - $1 WHERE user_id = $2",
+                                       rule["cost"], self.user.id)
+                    await conn.execute("UPDATE user_cards SET quantity = quantity - $1 WHERE user_id = $2 AND card_id = $3",
+                                       rule["copies"], self.user.id, card["card_id"])
+
+                # Always give upgraded card
                 await conn.execute("""
                     INSERT INTO user_cards (user_id, card_id, quantity)
                     VALUES ($1, $2, 1)
@@ -154,9 +162,13 @@ class UpgradeSelect(Select):
                 f"+🗡️ {new_entity.stats.attack - old_entity.stats.attack} | " \
                 f"+⚡ {new_entity.stats.speed - old_entity.stats.speed}"
 
+        desc = f"Your **{card['name']}** has been consumed and reborn as **{next_card['name']}**!"
+        if bypass:
+            desc += "\n\n⚡ *Admin bypass active: no cost or copies consumed.*"
+
         embed = discord.Embed(
             title="✨ The Mirror Shifts...",
-            description=f"Your **{card['name']}** has been consumed and reborn as **{next_card['name']}**!",
+            description=desc,
             color=RARITY_COLORS.get(next_rarity, discord.Color.dark_gray())
         )
         embed.set_image(url=MIRROR_IMAGE)
