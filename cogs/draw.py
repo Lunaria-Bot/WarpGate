@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import asyncio
 import random
+import time
 from .entities import entity_from_db, Entity
 from utils.leveling import add_xp  # XP helper
 
@@ -19,15 +20,14 @@ RARITY_EMOJIS = {
     "legendary": "🟡"
 }
 
-# --- Mimic data ---
 MIMIC_QUOTES = [
     "Treasure? Oh no, I’m the real reward.",
     "Curiosity tastes almost as good as fear.",
     "Funny how you never suspect the things you want most."
 ]
 
-MIMIC_IMAGE = "https://media.discordapp.net/attachments/1428401795364814948/1428401824024756316/image.png?ex=68f5015d&is=68f3afdd&hm=02bfb3a47a71b723f5571be11712f9e98702f001a1160cad067deaab0210f066&=&format=webp&quality=lossless&width=880&height=493"
-DRAW_ANIM = "https://media.discordapp.net/attachments/1390792811380478032/1428014081927024734/AZnoEBWwS3YhAlSY-j6uUA-AZnoEBWw4TsWJ2XCcPMwOQ.gif?ex=68f4e9c0&is=68f39840&hm=61f7a153c8ff4bec357130ae0cd3b00605c85cc0e2a016765c7035302526e101&=&width=440&height=248"
+MIMIC_IMAGE = "https://media.discordapp.net/attachments/.../mimic.png"
+DRAW_ANIM = "https://media.discordapp.net/attachments/.../warp_anim.gif"
 
 # --- Helper: update quest progress ---
 async def update_quest_progress(conn, user_id: int, quest_desc: str, amount: int = 1):
@@ -43,38 +43,33 @@ async def update_quest_progress(conn, user_id: int, quest_desc: str, amount: int
     """, user_id, quest_desc, amount)
 
 
-class Draw(commands.Cog):
+class Warp(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.cooldowns = {}  # {user_id: unix_timestamp_ready}
 
-    @commands.command(name="draw")
-    @commands.cooldown(1, 600, commands.BucketType.user)  # 1 use every 10 min
-    async def draw(self, ctx):
-        user_id = int(ctx.author.id)
+    @commands.command(name="warp")
+    async def warp(self, ctx):
+        user_id = ctx.author.id
+        now = int(time.time())
 
-        # --- Check ban / bypass flags ---
-        async with self.bot.db.acquire() as conn:
-            flags = await conn.fetchrow("""
-                SELECT banned, ban_reason, bypass_draw
-                FROM users
-                WHERE user_id = $1
-            """, user_id)
+        # Vérifier cooldown
+        if user_id in self.cooldowns and self.cooldowns[user_id] > now:
+            ready_at = self.cooldowns[user_id]
+            return await ctx.send(f"⏳ Time denies you once more... <t:{ready_at}:R>")
 
-        if flags and flags["banned"]:
-            reason = flags["ban_reason"] or "No reason provided"
-            await ctx.send(f"⛔ Your account is banned. Reason: {reason}")
-            return
+        # Définir cooldown (10 min)
+        cooldown_seconds = 600
+        ready_at = now + cooldown_seconds
+        self.cooldowns[user_id] = ready_at
 
-        if flags and flags["bypass_draw"]:
-            self.draw.reset_cooldown(ctx)
-
-        # 1) Animation
-        anim_embed = discord.Embed(description="🎴 Drawing in progress...", color=discord.Color.blurple())
+        # Animation
+        anim_embed = discord.Embed(description="🎴 Warping...", color=discord.Color.blurple())
         anim_embed.set_image(url=DRAW_ANIM)
         msg = await ctx.send(embed=anim_embed)
         await asyncio.sleep(2)
 
-        # 2) Mimic encounter (10%)
+        # --- Mimic encounter (10%) ---
         if random.randint(1, 100) <= 10:
             async with self.bot.db.acquire() as conn:
                 buddy_row = await conn.fetchrow("""
@@ -149,7 +144,7 @@ class Draw(commands.Cog):
                 if loot_card:
                     reward_entity = entity_from_db(loot_card)
                     reward_embed = discord.Embed(
-                        title=f"{RARITY_EMOJIS.get(loot_rarity,'')} {loot_card['name']} ({loot_rarity.capitalize()})",
+                        title=f"{RARITY_EMOJIS.get(loot_rarity,'')} {loot_card['name']}",
                         description=loot_card["description"] or "—",
                         color=RARITY_COLORS.get(loot_rarity, discord.Color.dark_gray())
                     )
@@ -178,7 +173,7 @@ class Draw(commands.Cog):
             if reward_embed:
                 await ctx.send(embed=reward_embed)
             return
-        # 3) Normal draw
+        # 3) Normal warp (tirage classique)
         async with self.bot.db.acquire() as conn:
             card = await conn.fetchrow("""
                 SELECT *
@@ -213,25 +208,18 @@ class Draw(commands.Cog):
         potential_val = int(card["potential"]) if card["potential"] else 0
         entity = entity_from_db(card)
 
-        # --- Card-style embed with rarity as a field ---
         result_embed = discord.Embed(
             title=f"You just got: {card['name']}",
             color=RARITY_COLORS.get(rarity, discord.Color.dark_gray())
         )
-
         result_embed.add_field(name="Rarity", value=rarity.capitalize(), inline=True)
-        result_embed.add_field(
-            name="Potential",
-            value=("⭐" * potential_val) if potential_val > 0 else "—",
-            inline=True
-        )
+        result_embed.add_field(name="Potential", value=("⭐" * potential_val) if potential_val > 0 else "—", inline=True)
         result_embed.add_field(
             name="Stats",
             value=f"❤️ {entity.stats.health} | 🗡️ {entity.stats.attack} | ⚡ {entity.stats.speed}",
             inline=False
         )
-
-        if card["image_url"]:
+                if card["image_url"]:
             result_embed.set_image(url=card["image_url"])
 
         await msg.edit(content=None, attachments=[], embed=result_embed)
@@ -241,18 +229,32 @@ class Draw(commands.Cog):
         if leveled_up:
             await ctx.send(f"🎉 {ctx.author.mention} leveled up to **Level {new_level}**!")
 
-    @draw.error
-    async def draw_error(self, ctx, error):
-        if isinstance(error, commands.CommandOnCooldown):
-            minutes = int(error.retry_after // 60)
-            seconds = int(error.retry_after % 60)
-            await ctx.send(
-                f"⏳ You need to wait **{minutes}m {seconds}s** before using `!draw` again!",
-                delete_after=10
-            )
-        else:
-            await ctx.send("⚠️ An unexpected error occurred while processing your draw.", delete_after=10)
+        # Reminder automatique
+        async def reminder():
+            await asyncio.sleep(cooldown_seconds)
+            await ctx.send(f"🔔 {ctx.author.mention} ton **Warp** est de nouveau disponible !")
+
+        self.bot.loop.create_task(reminder())
+
+    @commands.command(name="cooldown")
+    async def cooldown(self, ctx):
+        user_id = ctx.author.id
+        now = int(time.time())
+
+        # Daily reset à minuit UTC
+        tomorrow_midnight = (now // 86400 + 1) * 86400
+        daily_ready = tomorrow_midnight
+
+        # Warp basé sur cooldown dict
+        warp_ready = self.cooldowns.get(user_id, now)
+
+        embed = discord.Embed(title="⏳ Cooldowns", color=discord.Color.blurple())
+        embed.add_field(name="Daily", value=f"<t:{daily_ready}:R>", inline=False)
+        embed.add_field(name="Warp", value=f"<t:{warp_ready}:R>", inline=False)
+
+        await ctx.send(embed=embed)
 
 
 async def setup(bot):
-    await bot.add_cog(Draw(bot))
+    await bot.add_cog(Warp(bot))
+
