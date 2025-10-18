@@ -236,7 +236,7 @@ class Warp(commands.Cog):
         # Reminder automatique
         async def reminder():
             await asyncio.sleep(cooldown_seconds)
-            await ctx.send(f"🔔 {ctx.author.mention} ton **Warp** est de nouveau disponible !")
+            await ctx.send(f"🔔 {ctx.author.mention} **Warp** is available again !")
 
         self.bot.loop.create_task(reminder())
 
