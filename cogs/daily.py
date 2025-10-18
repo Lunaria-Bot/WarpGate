@@ -20,7 +20,7 @@ async def update_quest_progress(conn, user_id: int, quest_desc: str, amount: int
 class Daily(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.cooldowns = {}  # simple in-memory cooldown {user_id: datetime}
+        self.cooldowns = {}  # {user_id: datetime of last claim}
 
     @commands.command(name="daily")
     async def daily(self, ctx):
@@ -28,13 +28,20 @@ class Daily(commands.Cog):
         user_id = int(ctx.author.id)
         now = datetime.datetime.utcnow()
 
-        # Check cooldown (24h)
+        # Calculate today's and tomorrow's midnight UTC
+        today_midnight = datetime.datetime.combine(now.date(), datetime.time.min)
+        tomorrow_midnight = today_midnight + datetime.timedelta(days=1)
+
         last_claim = self.cooldowns.get(user_id)
-        if last_claim and (now - last_claim).total_seconds() < 86400:
-            remaining = 86400 - (now - last_claim).total_seconds()
+        if last_claim and last_claim >= today_midnight:
+            # Already claimed today
+            remaining = (tomorrow_midnight - now).total_seconds()
             hours = int(remaining // 3600)
             minutes = int((remaining % 3600) // 60)
-            await ctx.send(f"⏳ You already claimed your daily. Try again in {hours}h {minutes}m.")
+            await ctx.send(
+                f"⏳ You already claimed your daily. Next reset in {hours}h {minutes}m "
+                f"(<t:{int(tomorrow_midnight.timestamp())}:R>)."
+            )
             return
 
         async with self.bot.db.acquire() as conn:
@@ -49,6 +56,7 @@ class Daily(commands.Cog):
             await update_quest_progress(conn, user_id, "Do !daily", 1)
             await update_quest_progress(conn, user_id, "Do 5 !daily", 1)
 
+        # Save last claim timestamp
         self.cooldowns[user_id] = now
 
         # Confirmation embed
