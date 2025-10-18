@@ -12,6 +12,13 @@ RARITY_COLORS = {
     "legendary": discord.Color.gold()
 }
 
+RARITY_EMOJIS = {
+    "common": "⚪",
+    "rare": "🔵",
+    "epic": "🟣",
+    "legendary": "🟡"
+}
+
 # --- Mimic data ---
 MIMIC_QUOTES = [
     "Treasure? Oh no, I’m the real reward.",
@@ -19,10 +26,8 @@ MIMIC_QUOTES = [
     "Funny how you never suspect the things you want most."
 ]
 
-MIMIC_IMAGE = "https://media.discordapp.net/attachments/1428401795364814948/1428401824024756316/image.png?format=webp&quality=lossless&width=880&height=493"
-
-DRAW_ANIM = ("https://media.discordapp.net/attachments/1390792811380478032/1428014081927024734/"
-             "AZnoEBWwS3YhAlSY-j6uUA-AZnoEBWw4TsWJ2XCcPMwOQ.gif")
+MIMIC_IMAGE = "https://example.com/mimic.png"
+DRAW_ANIM = "https://example.com/draw_animation.gif"
 
 # --- Helper: update quest progress ---
 async def update_quest_progress(conn, user_id: int, quest_desc: str, amount: int = 1):
@@ -143,8 +148,15 @@ class Draw(commands.Cog):
 
                 if loot_card:
                     reward_entity = entity_from_db(loot_card)
-                    reward_embed = reward_entity.to_embed(title_prefix="🎁 Reward obtained:")
-                    reward_embed.description = f"You earned **50 Bloodcoins** and a **{loot_rarity.capitalize()}** card!"
+                    reward_embed = discord.Embed(
+                        title=f"{RARITY_EMOJIS.get(loot_rarity,'')} {loot_card['name']} ({loot_rarity.capitalize()})",
+                        description=loot_card["description"] or "—",
+                        color=RARITY_COLORS.get(loot_rarity, discord.Color.dark_gray())
+                    )
+                    if loot_card["image_url"]:
+                        reward_embed.set_image(url=loot_card["image_url"])
+                    reward_embed.add_field(name="Reward", value="50 Bloodcoins", inline=True)
+                    reward_embed.add_field(name="Stats", value=f"❤️ {reward_entity.stats.health} | 🗡️ {reward_entity.stats.attack} | ⚡ {reward_entity.stats.speed}", inline=False)
 
                 leveled_up, new_level = await add_xp(self.bot, user_id, 5)
                 if leveled_up:
@@ -162,7 +174,7 @@ class Draw(commands.Cog):
             if reward_embed:
                 await ctx.send(embed=reward_embed)
             return
-            # 3) Normal draw
+        # 3) Normal draw
         async with self.bot.db.acquire() as conn:
             card = await conn.fetchrow("""
                 SELECT *
@@ -194,21 +206,30 @@ class Draw(commands.Cog):
             await update_quest_progress(conn, user_id, "Draw 100 times", 1)
 
         rarity = card["rarity"]
-        potential = int(card["potential"]) if card["potential"] else 0
+        potential_val = int(card["potential"]) if card["potential"] else 0
+        entity = entity_from_db(card)
 
-        result_entity = entity_from_db(card)
-        result_embed = result_entity.to_embed(title_prefix="✨ You drew:")
-        result_embed.title = f"✨ You drew: {card['name']} ✨"
-        result_embed.color = RARITY_COLORS.get(rarity, discord.Color.dark_gray())
+        # --- Card‑style embed ---
+        result_embed = discord.Embed(
+            title=f"{RARITY_EMOJIS.get(rarity,'')} {card['name']} ({rarity.capitalize()})",
+            description=card["description"] or "—",
+            color=RARITY_COLORS.get(rarity, discord.Color.dark_gray())
+        )
+        if card["image_url"]:
+            result_embed.set_image(url=card["image_url"])
+
+        result_embed.add_field(name="Rarity", value=rarity.capitalize(), inline=True)
+        result_embed.add_field(name="Quantity", value="1", inline=True)
+        result_embed.add_field(name="Potential", value=("⭐" * potential_val) if potential_val > 0 else "—", inline=True)
         result_embed.add_field(
-            name="Potential",
-            value=("⭐" * potential) if potential > 0 else "—",
-            inline=True
+            name="Stats",
+            value=f"❤️ {entity.stats.health} | 🗡️ {entity.stats.attack} | ⚡ {entity.stats.speed}",
+            inline=False
         )
 
         await msg.edit(content=None, attachments=[], embed=result_embed)
 
-        # --- Gain XP (+5) ---
+        # XP gain
         leveled_up, new_level = await add_xp(self.bot, user_id, 5)
         if leveled_up:
             await ctx.send(f"🎉 {ctx.author.mention} leveled up to **Level {new_level}**!")
