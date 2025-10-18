@@ -19,7 +19,7 @@ class ProfileView(discord.ui.View):
     @discord.ui.button(label="📦 Inventory", style=discord.ButtonStyle.primary)
     async def inventory_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.user:
-            await interaction.response.send_message("⚠️ This isn’t your profile.", ephemeral=True)
+            await interaction.response.send_message("⚠️ Ce n’est pas ton profil.", ephemeral=True)
             return
 
         cog = self.bot.get_cog("Inventory")
@@ -27,12 +27,12 @@ class ProfileView(discord.ui.View):
             ctx = await commands.Context.from_interaction(interaction)
             await cog.inventory(ctx)
         else:
-            await interaction.response.send_message("⚠️ Inventory system not loaded.", ephemeral=True)
+            await interaction.response.send_message("⚠️ Le module Inventory n’est pas chargé.", ephemeral=True)
 
     @discord.ui.button(label="📜 Quests", style=discord.ButtonStyle.secondary)
     async def quests_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.user:
-            await interaction.response.send_message("⚠️ This isn’t your profile.", ephemeral=True)
+            await interaction.response.send_message("⚠️ Ce n’est pas ton profil.", ephemeral=True)
             return
 
         cog = self.bot.get_cog("Quests")
@@ -40,12 +40,12 @@ class ProfileView(discord.ui.View):
             ctx = await commands.Context.from_interaction(interaction)
             await cog.quests(ctx)
         else:
-            await interaction.response.send_message("⚠️ Quest system not loaded.", ephemeral=True)
+            await interaction.response.send_message("⚠️ Le module Quests n’est pas chargé.", ephemeral=True)
 
     @discord.ui.button(label="📊 Stats", style=discord.ButtonStyle.success)
     async def stats_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.user:
-            await interaction.response.send_message("⚠️ This isn’t your profile.", ephemeral=True)
+            await interaction.response.send_message("⚠️ Ce n’est pas ton profil.", ephemeral=True)
             return
 
         async with self.bot.db.acquire() as conn:
@@ -60,12 +60,12 @@ class ProfileView(discord.ui.View):
             """, self.user.id)
 
         embed = discord.Embed(
-            title=f"📊 {self.user.display_name}'s Aggregate Stats",
+            title=f"📊 Stats globales de {self.user.display_name}",
             color=discord.Color.green()
         )
-        embed.add_field(name="❤️ Total Health", value=str(totals["total_health"]), inline=True)
-        embed.add_field(name="🗡️ Total Attack", value=str(totals["total_attack"]), inline=True)
-        embed.add_field(name="⚡ Total Speed", value=str(totals["total_speed"]), inline=True)
+        embed.add_field(name="❤️ Santé totale", value=str(totals["total_health"]), inline=True)
+        embed.add_field(name="🗡️ Attaque totale", value=str(totals["total_attack"]), inline=True)
+        embed.add_field(name="⚡ Vitesse totale", value=str(totals["total_speed"]), inline=True)
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -74,7 +74,7 @@ class Profile(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="profile", description="Show your profile or another user's profile")
+    @app_commands.command(name="profile", description="Afficher ton profil ou celui d'un autre joueur")
     async def profile(self, interaction: discord.Interaction, member: discord.Member | None = None):
         user = member or interaction.user
         user_id = int(user.id)
@@ -87,7 +87,7 @@ class Profile(commands.Cog):
             """, user_id)
 
             if not profile:
-                await interaction.response.send_message("⚠️ This user does not have a profile yet.", ephemeral=True)
+                await interaction.response.send_message("⚠️ Cet utilisateur n’a pas encore de profil.", ephemeral=True)
                 return
 
             stats = await conn.fetchrow("""
@@ -103,16 +103,16 @@ class Profile(commands.Cog):
             """, user_id)
 
         embed = discord.Embed(
-            title=f"👤 {user.display_name}'s Profile",
+            title=f"👤 Profil de {user.display_name}",
             color=discord.Color.gold() if stats["legendaries"] else discord.Color.blurple()
         )
         embed.set_thumbnail(url=user.display_avatar.url)
 
         embed.add_field(name="💰 Balance", value=f"{profile['bloodcoins']:,} BloodCoins", inline=True)
-        embed.add_field(name="📅 Joined", value=profile["created_at"].strftime("%d %b %Y"), inline=True)
+        embed.add_field(name="📅 Créé le", value=profile["created_at"].strftime("%d %b %Y"), inline=True)
 
         if profile["updated_at"]:
-            embed.add_field(name="🔄 Last Update", value=profile["updated_at"].strftime("%d %b %Y"), inline=True)
+            embed.add_field(name="🔄 Dernière mise à jour", value=profile["updated_at"].strftime("%d %b %Y"), inline=True)
 
         collection = (
             f"**Total:** {stats['total'] or 0}\n"
@@ -125,10 +125,10 @@ class Profile(commands.Cog):
 
         achievements = []
         if stats["legendaries"]:
-            achievements.append("🏆 Legendary Owner")
+            achievements.append("🏆 Propriétaire de Légendaires")
         if profile["bloodcoins"] > 100000:
-            achievements.append("💎 Wealthy")
-        embed.add_field(name="🎖️ Achievements", value=", ".join(achievements) or "—", inline=False)
+            achievements.append("💎 Riche")
+        embed.add_field(name="🎖️ Succès", value=", ".join(achievements) or "—", inline=False)
 
         view = ProfileView(user, self.bot)
         await interaction.response.send_message(embed=embed, view=view)
