@@ -1,6 +1,6 @@
 import discord
+from discord import app_commands
 from discord.ext import commands
-from discord.ui import View, Button, Select
 from typing import Optional
 from .entities import entity_from_db
 
@@ -15,14 +15,13 @@ RARITY_ORDER = ["legendary", "epic", "rare", "common"]
 
 
 def format_stats(entity) -> str:
-    """Format stats from an Entity into a short inline string."""
     return f"❤️ {entity.stats.health} | 🗡️ {entity.stats.attack} | ⚡ {entity.stats.speed}"
 
 
-class RaritySelect(Select):
+class RaritySelect(discord.ui.Select):
     def __init__(self, parent_view: "InventoryView"):
         options = [
-            discord.SelectOption(label="All", value="all", description="Show all rarities"),
+            discord.SelectOption(label="All", value="all"),
             discord.SelectOption(label="Common", value="common"),
             discord.SelectOption(label="Rare", value="rare"),
             discord.SelectOption(label="Epic", value="epic"),
@@ -38,7 +37,7 @@ class RaritySelect(Select):
         await interaction.response.edit_message(embed=self.parent_view.format_page(), view=self.parent_view)
 
 
-class CardSelect(Select):
+class CardSelect(discord.ui.Select):
     def __init__(self, parent_view: "InventoryView", cards: list[dict]):
         self.parent_view = parent_view
         options = []
@@ -55,12 +54,11 @@ class CardSelect(Select):
                     value=str(c['card_id'])
                 )
             )
-        super().__init__(placeholder="Select a card to view details…", options=options, min_values=1, max_values=1)
+        super().__init__(placeholder="Select a card…", options=options, min_values=1, max_values=1)
 
     async def callback(self, interaction: discord.Interaction):
         card_id = int(self.values[0])
         card = next((c for c in self.parent_view.cards if c["card_id"] == card_id), None)
-
         if not card:
             await interaction.response.send_message("⚠️ Card not found.", ephemeral=True)
             return
@@ -88,7 +86,7 @@ class CardSelect(Select):
         await interaction.response.edit_message(embed=embed, view=self.parent_view)
 
 
-class InventoryView(View):
+class InventoryView(discord.ui.View):
     def __init__(self, cards: list[dict], balance: int, author: discord.Member):
         super().__init__(timeout=120)
         self.cards = cards
@@ -103,8 +101,8 @@ class InventoryView(View):
         self.card_select: Optional[CardSelect] = None
         self.update_card_select()
 
-        prev_button = Button(label="⬅️", style=discord.ButtonStyle.secondary)
-        next_button = Button(label="➡️", style=discord.ButtonStyle.secondary)
+        prev_button = discord.ui.Button(label="⬅️", style=discord.ButtonStyle.secondary)
+        next_button = discord.ui.Button(label="➡️", style=discord.ButtonStyle.secondary)
         prev_button.callback = lambda i: self.change_page(i, -1)
         next_button.callback = lambda i: self.change_page(i, +1)
         self.add_item(prev_button)
@@ -179,11 +177,9 @@ class Inventory(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @commands.command(name="inventory", aliases=["inv"])
-    async def inventory(self, ctx: commands.Context):
-        """Show the user's inventory with rarity filter, card selector, pagination, and stats."""
-        user_id = int(ctx.author.id)
-
+    async def show_inventory(self, interaction: discord.Interaction, user: discord.Member):
+        """Reusable helper for showing inventory (used by /inventory and profile button)."""
+        user_id = int(user.id)
         async with self.bot.db.acquire() as conn:
             rows = await conn.fetch("""
                 SELECT
@@ -207,12 +203,15 @@ class Inventory(commands.Cog):
             balance = await conn.fetchval("SELECT bloodcoins FROM users WHERE user_id = $1", user_id)
 
         if not rows:
-            await ctx.send("📭 Your inventory is empty. Use `!draw` to get cards!")
+            await interaction.response.send_message("📭 Your inventory is empty. Use `/draw` to get cards!", ephemeral=True)
             return
 
-        view = InventoryView(rows, balance, ctx.author)
-        message = await ctx.send(embed=view.format_page(), view=view)
-        view.message = message
+        view = InventoryView(rows, balance, user)
+        await interaction.response.send_message(embed=view.format_page(), view=view, ephemeral=True)
+
+    @app_commands.command(name="inventory", description="Show your inventory")
+    async def inventory(self, interaction: discord.Interaction):
+        await self.show_inventory(interaction, interaction.user)
 
 
 async def setup(bot: commands.Bot):
