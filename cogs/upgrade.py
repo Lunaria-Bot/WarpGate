@@ -18,7 +18,10 @@ RARITY_COLORS = {
     "legendary": discord.Color.gold()
 }
 
+# NPC images
 NPC_IMAGE = "https://media.discordapp.net/attachments/1428075046454431784/1429064750435926087/image.png"
+MIRROR_IMAGE = "https://media.discordapp.net/attachments/1390792811380478032/1428895604624457828/A_stylized_anime_girl_rendered_entirely_from_swirling_dynamic_shadows_emerges_from_a_reflective_ornate_mirror._The_scene_is_dramatic_with_deep_inky_blacks_and_subtle_hints_of_dark_purple_and_blue_within_the_shadow_form._The_mirrors_surface_sho.jpg"
+
 NPC_QUOTES = [
     "“Power has a price… lay your copies before the mirror, and let them vanish.”",
     "“Only by surrendering what you have… can you become what you seek.”",
@@ -85,10 +88,14 @@ class LookButton(Button):
         view = View(timeout=60)
         view.add_item(select)
 
-        await interaction.response.edit_message(
-            content="The mirror shows you what may be transformed...",
-            embed=None, view=view
+        embed = discord.Embed(
+            title="🌑 The Mirror Deepens",
+            description="A figure of swirling shadows emerges from the glass...",
+            color=discord.Color.dark_purple()
         )
+        embed.set_image(url=MIRROR_IMAGE)
+
+        await interaction.response.edit_message(embed=embed, view=view)
 
 
 class LeaveButton(Button):
@@ -124,13 +131,11 @@ class UpgradeSelect(Select):
                 await interaction.response.send_message("⚠️ No upgraded version found.", ephemeral=True)
                 return
 
-            # Build old/new entities for stats
             old_entity = entity_from_db(card, {
                 "health": card["u_health"], "attack": card["u_attack"], "speed": card["u_speed"]
             })
             new_entity = entity_from_db(next_card)
 
-            # Apply upgrade
             async with conn.transaction():
                 await conn.execute("UPDATE users SET bloodcoins = bloodcoins - $1 WHERE user_id = $2",
                                    rule["cost"], self.user.id)
@@ -143,7 +148,6 @@ class UpgradeSelect(Select):
                     DO UPDATE SET quantity = user_cards.quantity + 1
                 """, self.user.id, next_card["card_id"])
 
-        # Build confirmation embed with stats comparison
         old_stats = f"❤️ {old_entity.stats.health} | 🗡️ {old_entity.stats.attack} | ⚡ {old_entity.stats.speed}"
         new_stats = f"❤️ {new_entity.stats.health} | 🗡️ {new_entity.stats.attack} | ⚡ {new_entity.stats.speed}"
         delta = f"+❤️ {new_entity.stats.health - old_entity.stats.health} | " \
@@ -155,7 +159,7 @@ class UpgradeSelect(Select):
             description=f"Your **{card['name']}** has been consumed and reborn as **{next_card['name']}**!",
             color=RARITY_COLORS.get(next_rarity, discord.Color.dark_gray())
         )
-        embed.set_thumbnail(url=NPC_IMAGE)
+        embed.set_image(url=MIRROR_IMAGE)
         embed.add_field(name="Stats before", value=old_stats, inline=False)
         embed.add_field(name="Stats after", value=new_stats, inline=False)
         embed.add_field(name="Change", value=delta, inline=False)
