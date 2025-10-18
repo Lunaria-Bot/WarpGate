@@ -156,7 +156,11 @@ class Draw(commands.Cog):
                     if loot_card["image_url"]:
                         reward_embed.set_image(url=loot_card["image_url"])
                     reward_embed.add_field(name="Reward", value="50 Bloodcoins", inline=True)
-                    reward_embed.add_field(name="Stats", value=f"❤️ {reward_entity.stats.health} | 🗡️ {reward_entity.stats.attack} | ⚡ {reward_entity.stats.speed}", inline=False)
+                    reward_embed.add_field(
+                        name="Stats",
+                        value=f"❤️ {reward_entity.stats.health} | 🗡️ {reward_entity.stats.attack} | ⚡ {reward_entity.stats.speed}",
+                        inline=False
+                    )
 
                 leveled_up, new_level = await add_xp(self.bot, user_id, 5)
                 if leveled_up:
@@ -209,23 +213,25 @@ class Draw(commands.Cog):
         potential_val = int(card["potential"]) if card["potential"] else 0
         entity = entity_from_db(card)
 
-        # --- Card‑style embed ---
+        # --- Simplified card‑style embed ---
         result_embed = discord.Embed(
-            title=f"{RARITY_EMOJIS.get(rarity,'')} {card['name']} ({rarity.capitalize()})",
-            description=card["description"] or "—",
+            title=f"You just got: {card['name']} ({rarity.capitalize()})",
             color=RARITY_COLORS.get(rarity, discord.Color.dark_gray())
         )
-        if card["image_url"]:
-            result_embed.set_image(url=card["image_url"])
 
-        result_embed.add_field(name="Rarity", value=rarity.capitalize(), inline=True)
-        result_embed.add_field(name="Quantity", value="1", inline=True)
-        result_embed.add_field(name="Potential", value=("⭐" * potential_val) if potential_val > 0 else "—", inline=True)
+        result_embed.add_field(
+            name="Potential",
+            value=("⭐" * potential_val) if potential_val > 0 else "—",
+            inline=False
+        )
         result_embed.add_field(
             name="Stats",
             value=f"❤️ {entity.stats.health} | 🗡️ {entity.stats.attack} | ⚡ {entity.stats.speed}",
             inline=False
         )
+
+        if card["image_url"]:
+            result_embed.set_image(url=card["image_url"])
 
         await msg.edit(content=None, attachments=[], embed=result_embed)
 
