@@ -1,8 +1,10 @@
 import discord
 from discord.ext import commands
-from .entities import entity_from_db  # uses stat hierarchy: user_cards > cards > rarity base
+from discord.ui import View, Button, Select
+import random
+from .entities import entity_from_db
 
-# Upgrade rules: cost in Bloodcoins + copies required
+# Upgrade rules
 UPGRADE_RULES = {
     "common": {"next": "rare", "cost": 2000, "copies": 5},
     "rare": {"next": "epic", "cost": 5000, "copies": 20},
@@ -16,181 +18,170 @@ RARITY_COLORS = {
     "legendary": discord.Color.gold()
 }
 
-# --- Helper: update quest progress ---
-async def update_quest_progress(conn, user_id: int, quest_desc: str, amount: int = 1):
-    """Increment quest progress for a given quest description."""
-    await conn.execute("""
-        UPDATE user_quests uq
-        SET progress = progress + $3,
-            completed = (progress + $3) >= qt.target
-        FROM quest_templates qt
-        WHERE uq.quest_id = qt.quest_id
-          AND uq.user_id = $1
-          AND qt.description = $2
-          AND uq.claimed = FALSE
-    """, user_id, quest_desc, amount)
+NPC_IMAGE = "https://media.discordapp.net/attachments/1428075046454431784/1429064750435926087/image.png"
+NPC_QUOTES = [
+    "“Power has a price… lay your copies before the mirror, and let them vanish.”",
+    "“Only by surrendering what you have… can you become what you seek.”",
+    "“Do not mourn the cards you give. Their essence will live… through a stronger form.”",
+    "“Reflection reveals potential. Sacrifice reveals truth.”",
+    "“Bring me the duplicates. I will unmake them… and return to you something greater.”",
+    "“Every upgrade is a grave. Are you ready to bury what you own?”",
+    "“Let the mirror consume your excess. In return, it will sharpen your fate.”"
+]
 
-
-class Upgrade(commands.Cog):
-    def __init__(self, bot):
+# --- UI Components ---
+class MirrorView(View):
+    def __init__(self, bot, user):
+        super().__init__(timeout=60)
         self.bot = bot
+        self.user = user
+        self.add_item(LookButton(bot, user))
+        self.add_item(LeaveButton())
 
-    @commands.command(name="upgrade")
-    async def upgrade(self, ctx, *, args: str):
-        """
-        Upgrade a card by name and rarity.
-        Example: !upgrade Makima Common
-                 !upgrade Maki Zenin Common
-        """
-        user_id = int(ctx.author.id)
 
-        # Split into card name + rarity
-        parts = args.rsplit(" ", 1)
-        if len(parts) != 2:
-            await ctx.send("⚠️ Usage: !upgrade <card name> <rarity>")
+class LookButton(Button):
+    def __init__(self, bot, user):
+        super().__init__(label="Look into the mirror", style=discord.ButtonStyle.primary)
+        self.bot = bot
+        self.user = user
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user != self.user:
+            await interaction.response.send_message("⚠️ This is not your mirror.", ephemeral=True)
             return
-
-        base_name, rarity = parts
-        rarity = rarity.lower()
-
-        if rarity not in UPGRADE_RULES:
-            await ctx.send("⚠️ This rarity cannot be upgraded (or is invalid).")
-            return
-
-        rule = UPGRADE_RULES[rarity]
-        next_rarity = rule["next"]
 
         async with self.bot.db.acquire() as conn:
-            # 1) Check user balance
-            balance = await conn.fetchval(
-                "SELECT bloodcoins FROM users WHERE user_id = $1", user_id
-            )
-            if balance is None:
-                await ctx.send("⚠️ You don't have a profile yet.")
-                return
-
-            # 2) Fetch current card + stats (cards & user_cards overrides)
-            card = await conn.fetchrow("""
-                SELECT uc.quantity,
-                       c.card_id, c.name, c.rarity, c.base_name, c.image_url, c.description, c.potential,
+            rows = await conn.fetch("""
+                SELECT c.card_id, c.base_name, c.name, c.rarity, uc.quantity,
                        c.health, c.attack, c.speed,
                        uc.health AS u_health, uc.attack AS u_attack, uc.speed AS u_speed
                 FROM user_cards uc
                 JOIN cards c ON c.card_id = uc.card_id
                 WHERE uc.user_id = $1
-                  AND LOWER(c.base_name) = LOWER($2)
-                  AND c.rarity = $3
-            """, user_id, base_name.strip(), rarity)
+            """, self.user.id)
 
-            if not card:
-                await ctx.send(f"⚠️ You don't own {base_name} ({rarity.capitalize()}).")
-                return
+        upgradable = []
+        for row in rows:
+            if row["rarity"] in UPGRADE_RULES and row["quantity"] >= UPGRADE_RULES[row["rarity"]]["copies"]:
+                upgradable.append(row)
 
-            # Build entity for old stats (effective)
-            old_entity = entity_from_db(card, {
-                "health": card["u_health"], "attack": card["u_attack"], "speed": card["u_speed"]
-            })
-            old_h, old_a, old_s = old_entity.stats.health, old_entity.stats.attack, old_entity.stats.speed
+        if not upgradable:
+            await interaction.response.edit_message(
+                content="The mirror whispers: *You have nothing to offer me...*",
+                embed=None, view=None
+            )
+            return
 
-            # 3) Check requirements
-            if balance < rule["cost"]:
-                await ctx.send(f"❌ You need {rule['cost']} BloodCoins to upgrade.")
-                return
-            if card["quantity"] < rule["copies"]:
-                await ctx.send(f"❌ You need {rule['copies']} copies of this card to upgrade.")
-                return
+        options = [
+            discord.SelectOption(
+                label=f"{c['name']} ({c['rarity'].capitalize()})",
+                description=f"Qty: {c['quantity']} → Upgrade to {UPGRADE_RULES[c['rarity']]['next'].capitalize()}",
+                value=str(c["card_id"])
+            )
+            for c in upgradable[:25]
+        ]
 
-            # 4) Fetch upgraded version with stats
+        select = UpgradeSelect(self.bot, self.user, upgradable, options)
+        view = View(timeout=60)
+        view.add_item(select)
+
+        await interaction.response.edit_message(
+            content="The mirror shows you what may be transformed...",
+            embed=None, view=view
+        )
+
+
+class LeaveButton(Button):
+    def __init__(self):
+        super().__init__(label="Leave the mirror behind", style=discord.ButtonStyle.danger)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(content="You turn away from the mirror.", embed=None, view=None)
+
+
+class UpgradeSelect(Select):
+    def __init__(self, bot, user, cards, options):
+        super().__init__(placeholder="Choose a card to upgrade...", options=options, min_values=1, max_values=1)
+        self.bot = bot
+        self.user = user
+        self.cards = {str(c["card_id"]): c for c in cards}
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user != self.user:
+            await interaction.response.send_message("⚠️ This is not your mirror.", ephemeral=True)
+            return
+
+        card = self.cards[self.values[0]]
+        rule = UPGRADE_RULES[card["rarity"]]
+        next_rarity = rule["next"]
+
+        async with self.bot.db.acquire() as conn:
             next_card = await conn.fetchrow("""
-                SELECT card_id, name, rarity, image_url, description, potential,
-                       health, attack, speed
-                FROM cards
-                WHERE base_name = $1 AND rarity = $2
-                LIMIT 1
+                SELECT * FROM cards WHERE base_name = $1 AND rarity = $2 LIMIT 1
             """, card["base_name"], next_rarity)
 
             if not next_card:
-                await ctx.send(f"⚠️ No upgraded version found for {card['name']} → {next_rarity}.")
+                await interaction.response.send_message("⚠️ No upgraded version found.", ephemeral=True)
                 return
 
-            # Build entity for new stats (effective; user_cards overrides won't exist yet)
+            # Build old/new entities for stats
+            old_entity = entity_from_db(card, {
+                "health": card["u_health"], "attack": card["u_attack"], "speed": card["u_speed"]
+            })
             new_entity = entity_from_db(next_card)
-            new_h, new_a, new_s = new_entity.stats.health, new_entity.stats.attack, new_entity.stats.speed
 
-            # 5) Transaction: remove coins + copies, add upgraded card
+            # Apply upgrade
             async with conn.transaction():
-                await conn.execute(
-                    "UPDATE users SET bloodcoins = bloodcoins - $1 WHERE user_id = $2",
-                    rule["cost"], user_id
-                )
-                await conn.execute(
-                    "UPDATE user_cards SET quantity = quantity - $1 WHERE user_id = $2 AND card_id = $3",
-                    rule["copies"], user_id, card["card_id"]
-                )
+                await conn.execute("UPDATE users SET bloodcoins = bloodcoins - $1 WHERE user_id = $2",
+                                   rule["cost"], self.user.id)
+                await conn.execute("UPDATE user_cards SET quantity = quantity - $1 WHERE user_id = $2 AND card_id = $3",
+                                   rule["copies"], self.user.id, card["card_id"])
                 await conn.execute("""
                     INSERT INTO user_cards (user_id, card_id, quantity)
                     VALUES ($1, $2, 1)
                     ON CONFLICT (user_id, card_id)
                     DO UPDATE SET quantity = user_cards.quantity + 1
-                """, user_id, next_card["card_id"])
+                """, self.user.id, next_card["card_id"])
 
-                # ✅ Update quest progress
-                await update_quest_progress(conn, user_id, "Upgrade 1 card", 1)
-                await update_quest_progress(conn, user_id, "Upgrade 2 cards", 1)
-                await update_quest_progress(conn, user_id, "Upgrade 10 cards", 1)
-
-        # 6) Confirmation embed with stats comparison
-        potential = int(next_card["potential"]) if next_card["potential"] is not None else 0
+        # Build confirmation embed with stats comparison
+        old_stats = f"❤️ {old_entity.stats.health} | 🗡️ {old_entity.stats.attack} | ⚡ {old_entity.stats.speed}"
+        new_stats = f"❤️ {new_entity.stats.health} | 🗡️ {new_entity.stats.attack} | ⚡ {new_entity.stats.speed}"
+        delta = f"+❤️ {new_entity.stats.health - old_entity.stats.health} | " \
+                f"+🗡️ {new_entity.stats.attack - old_entity.stats.attack} | " \
+                f"+⚡ {new_entity.stats.speed - old_entity.stats.speed}"
 
         embed = discord.Embed(
-            title="🔼 Upgrade Successful!",
-            description=f"{card['name']} has been upgraded to **{next_card['name']}**!",
+            title="✨ The Mirror Shifts...",
+            description=f"Your **{card['name']}** has been consumed and reborn as **{next_card['name']}**!",
             color=RARITY_COLORS.get(next_rarity, discord.Color.dark_gray())
         )
-        embed.add_field(name="Cost", value=f"{rule['cost']} BloodCoins", inline=True)
-        embed.add_field(name="Copies Used", value=str(rule["copies"]), inline=True)
-        embed.add_field(name="New Potential", value=("⭐" * potential) if potential > 0 else "—", inline=True)
+        embed.set_thumbnail(url=NPC_IMAGE)
+        embed.add_field(name="Stats before", value=old_stats, inline=False)
+        embed.add_field(name="Stats after", value=new_stats, inline=False)
+        embed.add_field(name="Change", value=delta, inline=False)
 
-        # Stats comparison
-        stats_before = f"❤️ {old_h} | 🗡️ {old_a} | ⚡ {old_s}"
-        stats_after  = f"❤️ {new_h} | 🗡️ {new_a} | ⚡ {new_s}"
-        delta_h = new_h - old_h
-        delta_a = new_a - old_a
-        delta_s = new_s - old_s
-        stats_delta = f"+❤️ {delta_h} | +🗡️ {delta_a} | +⚡ {delta_s}"
+        await interaction.response.edit_message(content=None, embed=embed, view=None)
 
-        embed.add_field(name="Stats before", value=stats_before, inline=False)
-        embed.add_field(name="Stats after", value=stats_after, inline=False)
-        embed.add_field(name="Change", value=stats_delta, inline=False)
 
-        if next_card["image_url"]:
-            embed.set_thumbnail(url=next_card["image_url"])
+# --- Cog ---
+class UpgradeNPC(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
 
-        await ctx.send(embed=embed)
-
-    @commands.command(name="upgradeinfo")
-    async def upgradeinfo(self, ctx):
-        """Show upgrade requirements for each rarity."""
+    @commands.command(name="upgrade")
+    async def upgrade(self, ctx):
+        """Begin the NPC upgrade ritual."""
+        quote = random.choice(NPC_QUOTES)
         embed = discord.Embed(
-            title="📖 Upgrade Rules",
-            description="Here are the requirements to upgrade your cards:",
-            color=discord.Color.blurple()
+            title="🪞 The Mirror",
+            description=quote,
+            color=discord.Color.purple()
         )
+        embed.set_image(url=NPC_IMAGE)
 
-        for rarity, rule in UPGRADE_RULES.items():
-            next_rarity = rule["next"].capitalize()
-            cost = rule["cost"]
-            copies = rule["copies"]
-
-            embed.add_field(
-                name=f"{rarity.capitalize()} ➝ {next_rarity}",
-                value=f"💰 Cost: {cost} BloodCoins\n🃏 Copies: {copies}",
-                inline=False
-            )
-
-        embed.set_footer(text="Legendary cards cannot be upgraded further.")
-        await ctx.send(embed=embed)
+        view = MirrorView(self.bot, ctx.author)
+        await ctx.send(embed=embed, view=view)
 
 
 async def setup(bot):
-    await bot.add_cog(Upgrade(bot))
+    await bot.add_cog(UpgradeNPC(bot))
