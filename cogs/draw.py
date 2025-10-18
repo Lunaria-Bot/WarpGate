@@ -213,16 +213,17 @@ class Draw(commands.Cog):
         potential_val = int(card["potential"]) if card["potential"] else 0
         entity = entity_from_db(card)
 
-        # --- Simplified card‑style embed ---
+        # --- Card-style embed with rarity as a field ---
         result_embed = discord.Embed(
-            title=f"You just got: {card['name']} ({rarity.capitalize()})",
+            title=f"You just got: {card['name']}",
             color=RARITY_COLORS.get(rarity, discord.Color.dark_gray())
         )
 
+        result_embed.add_field(name="Rarity", value=rarity.capitalize(), inline=True)
         result_embed.add_field(
             name="Potential",
             value=("⭐" * potential_val) if potential_val > 0 else "—",
-            inline=False
+            inline=True
         )
         result_embed.add_field(
             name="Stats",
