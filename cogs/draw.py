@@ -3,6 +3,7 @@ from discord.ext import commands
 import asyncio
 import random
 from .entities import entity_from_db, Entity  # uses stat hierarchy: user_cards > cards > rarity base
+from utils.leveling import add_xp  # helper XP
 
 RARITY_COLORS = {
     "common": discord.Color.light_gray(),
@@ -47,8 +48,8 @@ class Draw(commands.Cog):
     async def draw(self, ctx):
         """
         Draw a card with a 10% chance of encountering a Mimic instead.
-        Normal draw: +10 Bloodcoins, adds a random common card to inventory, updates quests.
-        Mimic: autobattle using player's Buddy stats; if win → +50 Bloodcoins + loot card with 90% Rare / 9.5% Epic / 0.5% Legendary.
+        Normal draw: +10 Bloodcoins, adds a random common card to inventory, updates quests, +5 XP.
+        Mimic: autobattle using player's Buddy stats; if win → +50 Bloodcoins + loot card (90% Rare / 9.5% Epic / 0.5% Legendary), +5 XP.
         """
         user_id = int(ctx.author.id)
 
@@ -76,12 +77,11 @@ class Draw(commands.Cog):
                     user_card_row={"health": buddy_row["u_health"], "attack": buddy_row["u_attack"], "speed": buddy_row["u_speed"]}
                 )
                 player.description = f"Buddy of {ctx.author.display_name}"
-                player_name = buddy_row["name"]  # display buddy card name as player name
-                player.name = player_name
+                player.name = buddy_row["name"]
             else:
                 player = Entity(ctx.author.display_name, rarity="common", description="Adventurer without buddy")
 
-            # Create Mimic entity (fixed stats for now)
+            # Create Mimic entity
             mimic = Entity("Mimic", rarity="epic",
                            image_url=MIMIC_IMAGE,
                            description=random.choice(MIMIC_QUOTES),
@@ -105,7 +105,6 @@ class Draw(commands.Cog):
             log.append(f"🏆 **{winner.name}** wins the battle!")
 
             reward_embed = None
-            # Rewards if player wins
             if winner == player:
                 async with self.bot.db.acquire() as conn:
                     # +50 Bloodcoins
@@ -115,7 +114,7 @@ class Draw(commands.Cog):
                         WHERE user_id = $1
                     """, user_id)
 
-                    # Rarity roll: 90% Rare, 9.5% Epic, 0.5% Legendary
+                    # Rarity roll
                     roll = random.random() * 100
                     if roll <= 90:
                         loot_rarity = "rare"
@@ -124,7 +123,6 @@ class Draw(commands.Cog):
                     else:
                         loot_rarity = "legendary"
 
-                    # Draw a loot card of that rarity
                     loot_card = await conn.fetchrow("""
                         SELECT card_id, base_name, name, rarity, potential, image_url, description,
                                health, attack, speed
@@ -135,7 +133,6 @@ class Draw(commands.Cog):
                     """, loot_rarity)
 
                     if loot_card:
-                        # Add to inventory (quantity)
                         await conn.execute("""
                             INSERT INTO user_cards (user_id, card_id, quantity)
                             VALUES ($1, $2, 1)
@@ -143,13 +140,16 @@ class Draw(commands.Cog):
                             DO UPDATE SET quantity = user_cards.quantity + 1
                         """, user_id, loot_card["card_id"])
 
-                # Build reward embed via entity_from_db (uses card stats if set)
                 if loot_card:
                     reward_entity = entity_from_db(loot_card)
                     reward_embed = reward_entity.to_embed(title_prefix="🎁 Reward obtained:")
                     reward_embed.description = f"You earned **50 Bloodcoins** and a **{loot_rarity.capitalize()}** card!"
 
-            # Final combat embed (log)
+                # --- Gain XP (+5) ---
+                leveled_up, new_level = await add_xp(self.bot, user_id, 5)
+                if leveled_up:
+                    await ctx.send(f"🎉 {ctx.author.mention} leveled up to **Level {new_level}**!")
+
             combat_embed = discord.Embed(
                 title="⚔️ Battle against the Mimic",
                 description="\n".join(log),
@@ -178,7 +178,6 @@ class Draw(commands.Cog):
                 await msg.edit(content="⚠️ No common cards available in the database.", attachments=[], embed=None)
                 return
 
-            # Add card to inventory
             await conn.execute("""
                 INSERT INTO user_cards (user_id, card_id, quantity)
                 VALUES ($1, $2, 1)
@@ -186,14 +185,12 @@ class Draw(commands.Cog):
                 DO UPDATE SET quantity = user_cards.quantity + 1
             """, user_id, card["card_id"])
 
-            # +10 Bloodcoins for normal draw
             await conn.execute("""
                 UPDATE users
                 SET bloodcoins = bloodcoins + 10
                 WHERE user_id = $1
             """, user_id)
 
-            # Quest progress updates
             await update_quest_progress(conn, user_id, "Draw 5 times", 1)
             await update_quest_progress(conn, user_id, "Draw 10 times", 1)
             await update_quest_progress(conn, user_id, "Draw 100 times", 1)
@@ -201,7 +198,6 @@ class Draw(commands.Cog):
         rarity = card["rarity"]
         potential = int(card["potential"]) if card["potential"] is not None else 0
 
-        # Build result embed (use entity_from_db to keep stat hierarchy; but show potential and rarity color)
         result_entity = entity_from_db(card)
         result_embed = result_entity.to_embed(title_prefix="✨ You drew:")
         result_embed.title = f"✨ You drew: {card['name']} ✨"
@@ -209,6 +205,11 @@ class Draw(commands.Cog):
         result_embed.add_field(name="Potential", value=("⭐" * potential) if potential > 0 else "—", inline=True)
 
         await msg.edit(content=None, attachments=[], embed=result_embed)
+
+        # --- Gain XP (+5) ---
+        leveled_up, new_level = await add_xp(self.bot, user_id, 5)
+        if leveled_up:
+            await ctx.send(f"🎉 {ctx.author.mention} leveled up to **Level {new_level}**!")
 
     @draw.error
     async def draw_error(self, ctx, error):
@@ -219,6 +220,8 @@ class Draw(commands.Cog):
                 f"⏳ You need to wait **{minutes}m {seconds}s** before using `!draw` again!",
                 delete_after=10
             )
+        else:
+            await ctx.send("⚠️ An error occurred while processing your draw.", delete_after=10)
 
 
 async def setup(bot):
