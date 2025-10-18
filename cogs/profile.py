@@ -1,5 +1,4 @@
 import discord
-from discord import app_commands
 from discord.ext import commands
 
 RARITY_EMOJIS = {
@@ -9,84 +8,25 @@ RARITY_EMOJIS = {
     "legendary": "🟡"
 }
 
-GUILD_ID = 1399784437440319508  # your guild ID
-
-
-class ProfileView(discord.ui.View):
-    def __init__(self, user: discord.Member, bot: commands.Bot):
-        super().__init__(timeout=60)
-        self.user = user
-        self.bot = bot
-
-    @discord.ui.button(label="📦 Inventory", style=discord.ButtonStyle.primary)
-    async def inventory_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user != self.user:
-            await interaction.response.send_message("⚠️ This is not your profile.", ephemeral=True)
-            return
-        cog = self.bot.get_cog("Inventory")
-        if cog:
-            await cog.show_inventory(interaction, self.user)
-        else:
-            await interaction.response.send_message("⚠️ Inventory system not loaded.", ephemeral=True)
-
-    @discord.ui.button(label="📜 Quests", style=discord.ButtonStyle.secondary)
-    async def quests_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user != self.user:
-            await interaction.response.send_message("⚠️ This is not your profile.", ephemeral=True)
-            return
-        cog = self.bot.get_cog("Quests")
-        if cog:
-            await cog.show_quests(interaction, self.user)
-        else:
-            await interaction.response.send_message("⚠️ Quest system not loaded.", ephemeral=True)
-
-    @discord.ui.button(label="📊 Stats", style=discord.ButtonStyle.success)
-    async def stats_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user != self.user:
-            await interaction.response.send_message("⚠️ This is not your profile.", ephemeral=True)
-            return
-
-        async with self.bot.db.acquire() as conn:
-            totals = await conn.fetchrow("""
-                SELECT 
-                    COALESCE(SUM(c.health * uc.quantity), 0) AS total_health,
-                    COALESCE(SUM(c.attack * uc.quantity), 0) AS total_attack,
-                    COALESCE(SUM(c.speed * uc.quantity), 0) AS total_speed
-                FROM user_cards uc
-                JOIN cards c ON c.card_id = uc.card_id
-                WHERE uc.user_id = $1
-            """, self.user.id)
-
-        embed = discord.Embed(
-            title=f"📊 Aggregate Stats for {self.user.display_name}",
-            color=discord.Color.green()
-        )
-        embed.add_field(name="❤️ Total Health", value=str(totals["total_health"]), inline=True)
-        embed.add_field(name="🗡️ Total Attack", value=str(totals["total_attack"]), inline=True)
-        embed.add_field(name="⚡ Total Speed", value=str(totals["total_speed"]), inline=True)
-
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
 class Profile(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
-    @app_commands.command(name="profile", description="Show your profile or another user's profile")
-    async def profile(self, interaction: discord.Interaction, member: discord.Member | None = None):
-        user = member or interaction.user
-        user_id = int(user.id)
+    @commands.command(name="profile")
+    async def profile(self, ctx, member: discord.Member = None):
+        user = member or ctx.author
+        user_id = user.id
 
         async with self.bot.db.acquire() as conn:
             profile = await conn.fetchrow("""
-                SELECT user_id, bloodcoins, created_at, updated_at, current_buddy_id
+                SELECT user_id, bloodcoins, noble_coins, level, xp, xp_next,
+                       created_at, updated_at, buddy_card_id
                 FROM users
                 WHERE user_id = $1
             """, user_id)
 
             if not profile:
-                await interaction.response.send_message("⚠️ This user does not have a profile yet.", ephemeral=True)
+                await ctx.send("⚠️ Cet utilisateur n’a pas encore de profil.")
                 return
 
             stats = await conn.fetchrow("""
@@ -102,25 +42,42 @@ class Profile(commands.Cog):
             """, user_id)
 
             buddy = None
-            if profile["current_buddy_id"]:
+            if profile["buddy_card_id"]:
                 buddy = await conn.fetchrow("""
                     SELECT name, image_url
                     FROM buddies
                     WHERE buddy_id = $1
-                """, profile["current_buddy_id"])
+                """, profile["buddy_card_id"])
 
+        # --- Embed style fiche joueur ---
         embed = discord.Embed(
-            title=f"👤 Profile of {user.display_name}",
+            title=f"👤 Profil de {user.display_name}",
             color=discord.Color.gold() if stats["legendaries"] else discord.Color.blurple()
         )
         embed.set_thumbnail(url=user.display_avatar.url)
 
-        embed.add_field(name="💰 Balance", value=f"{profile['bloodcoins']:,} BloodCoins", inline=True)
-        embed.add_field(name="📅 Created", value=profile["created_at"].strftime("%d %b %Y"), inline=True)
+        # Monnaies
+        embed.add_field(name="💰 BloodCoins", value=f"{profile['bloodcoins']:,}", inline=True)
+        embed.add_field(name="💎 Noble Coins", value=f"{profile['noble_coins']:,}", inline=True)
 
+        # Niveau & XP
+        xp = profile["xp"]
+        xp_next = profile["xp_next"]
+        level = profile["level"]
+        progress = int((xp / xp_next) * 20) if xp_next else 0
+        bar = "█" * progress + "░" * (20 - progress)
+        embed.add_field(
+            name="📈 Niveau",
+            value=f"Lvl {level} | {xp}/{xp_next} XP\n`{bar}`",
+            inline=False
+        )
+
+        # Dates
+        embed.add_field(name="📅 Créé le", value=profile["created_at"].strftime("%d %b %Y"), inline=True)
         if profile["updated_at"]:
-            embed.add_field(name="🔄 Last Update", value=profile["updated_at"].strftime("%d %b %Y"), inline=True)
+            embed.add_field(name="🔄 Dernière maj", value=profile["updated_at"].strftime("%d %b %Y"), inline=True)
 
+        # Collection
         collection = (
             f"**Total:** {stats['total'] or 0}\n"
             f"{RARITY_EMOJIS['common']} {stats['commons'] or 0} | "
@@ -130,26 +87,24 @@ class Profile(commands.Cog):
         )
         embed.add_field(name="🃏 Collection", value=collection, inline=False)
 
-        achievements = []
-        if stats["legendaries"]:
-            achievements.append("🏆 Legendary Owner")
-        if profile["bloodcoins"] > 100000:
-            achievements.append("💎 Wealthy")
-        embed.add_field(name="🎖️ Achievements", value=", ".join(achievements) or "—", inline=False)
-
+        # Buddy
         if buddy:
             embed.add_field(name="🐾 Buddy", value=buddy["name"], inline=False)
             if buddy["image_url"]:
                 embed.set_image(url=buddy["image_url"])
 
-        view = ProfileView(user, self.bot)
-        await interaction.response.send_message(embed=embed, view=view)
+        # Succès / Badges
+        achievements = []
+        if stats["legendaries"]:
+            achievements.append("🏆 Legendary Owner")
+        if profile["bloodcoins"] > 100000:
+            achievements.append("💎 Riche")
+        if profile["level"] >= 10:
+            achievements.append("⭐ Niveau 10+")
+        embed.add_field(name="🎖️ Succès", value=", ".join(achievements) or "—", inline=False)
 
-    async def cog_load(self):
-        cmds = await self.bot.tree.fetch_commands(guild=discord.Object(id=GUILD_ID))
-        names = [c.name for c in cmds]
-        print(f"[Profile] Commands in tree for guild {GUILD_ID}: {names}")
+        await ctx.send(embed=embed)
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot):
     await bot.add_cog(Profile(bot))
