@@ -19,8 +19,8 @@ class Profile(commands.Cog):
 
         async with self.bot.db.acquire() as conn:
             profile = await conn.fetchrow("""
-                SELECT user_id, bloodcoins, noble_coins, level, xp, xp_next,
-                       created_at, updated_at, buddy_card_id
+                SELECT user_id, username, bloodcoins, noble_coins, level, xp, xp_next,
+                       created_at, updated_at, buddy_card_id, badges, equipment
                 FROM users
                 WHERE user_id = $1
             """, user_id)
@@ -45,25 +45,25 @@ class Profile(commands.Cog):
             if profile["buddy_card_id"]:
                 buddy = await conn.fetchrow("""
                     SELECT name, image_url
-                    FROM buddies
-                    WHERE buddy_id = $1
+                    FROM cards
+                    WHERE card_id = $1
                 """, profile["buddy_card_id"])
 
-        # --- Embed style fiche joueur ---
+        # Embed
         embed = discord.Embed(
             title=f"👤 Profil de {user.display_name}",
-            color=discord.Color.gold() if stats["legendaries"] else discord.Color.blurple()
+            color=discord.Color.gold() if (stats and stats["legendaries"]) else discord.Color.blurple()
         )
         embed.set_thumbnail(url=user.display_avatar.url)
 
-        # Monnaies
+        # Currency
         embed.add_field(name="💰 BloodCoins", value=f"{profile['bloodcoins']:,}", inline=True)
         embed.add_field(name="💎 Noble Coins", value=f"{profile['noble_coins']:,}", inline=True)
 
-        # Niveau & XP
-        xp = profile["xp"]
-        xp_next = profile["xp_next"]
-        level = profile["level"]
+        # Level & XP
+        xp = profile.get("xp", 0) or 0
+        xp_next = profile.get("xp_next", 100) or 100
+        level = profile.get("level", 1) or 1
         progress = int((xp / xp_next) * 20) if xp_next else 0
         bar = "█" * progress + "░" * (20 - progress)
         embed.add_field(
@@ -73,33 +73,35 @@ class Profile(commands.Cog):
         )
 
         # Dates
-        embed.add_field(name="📅 Créé le", value=profile["created_at"].strftime("%d %b %Y"), inline=True)
+        if profile["created_at"]:
+            embed.add_field(name="📅 Créé le", value=profile["created_at"].strftime("%d %b %Y"), inline=True)
         if profile["updated_at"]:
             embed.add_field(name="🔄 Dernière maj", value=profile["updated_at"].strftime("%d %b %Y"), inline=True)
 
         # Collection
-        collection = (
-            f"**Total:** {stats['total'] or 0}\n"
-            f"{RARITY_EMOJIS['common']} {stats['commons'] or 0} | "
-            f"{RARITY_EMOJIS['rare']} {stats['rares'] or 0} | "
-            f"{RARITY_EMOJIS['epic']} {stats['epics'] or 0} | "
-            f"{RARITY_EMOJIS['legendary']} {stats['legendaries'] or 0}"
-        )
-        embed.add_field(name="🃏 Collection", value=collection, inline=False)
+        if stats:
+            collection = (
+                f"**Total:** {stats['total'] or 0}\n"
+                f"{RARITY_EMOJIS['common']} {stats['commons'] or 0} | "
+                f"{RARITY_EMOJIS['rare']} {stats['rares'] or 0} | "
+                f"{RARITY_EMOJIS['epic']} {stats['epics'] or 0} | "
+                f"{RARITY_EMOJIS['legendary']} {stats['legendaries'] or 0}"
+            )
+            embed.add_field(name="🃏 Collection", value=collection, inline=False)
 
-        # Buddy
+        # Buddy (from cards)
         if buddy:
             embed.add_field(name="🐾 Buddy", value=buddy["name"], inline=False)
             if buddy["image_url"]:
                 embed.set_image(url=buddy["image_url"])
 
-        # Succès / Badges
+        # Achievements / Badges
         achievements = []
-        if stats["legendaries"]:
+        if stats and stats["legendaries"]:
             achievements.append("🏆 Legendary Owner")
         if profile["bloodcoins"] > 100000:
             achievements.append("💎 Riche")
-        if profile["level"] >= 10:
+        if level >= 10:
             achievements.append("⭐ Niveau 10+")
         embed.add_field(name="🎖️ Succès", value=", ".join(achievements) or "—", inline=False)
 
