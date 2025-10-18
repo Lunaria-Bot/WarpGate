@@ -1,11 +1,16 @@
 import discord
-from discord import app_commands
 from discord.ext import commands
 from typing import Optional
 from .entities import entity_from_db
 
 # Shared rarity constants
-RARITY_COLORS: dict[str, discord.Color] = {
+RARITY_EMOJIS = {
+    "common": "⚪",
+    "rare": "🔵",
+    "epic": "🟣",
+    "legendary": "🟡"
+}
+RARITY_COLORS = {
     "common": discord.Color.light_gray(),
     "rare": discord.Color.blue(),
     "epic": discord.Color.purple(),
@@ -22,15 +27,19 @@ class RaritySelect(discord.ui.Select):
     def __init__(self, parent_view: "InventoryView"):
         options = [
             discord.SelectOption(label="All", value="all"),
-            discord.SelectOption(label="Common", value="common"),
-            discord.SelectOption(label="Rare", value="rare"),
-            discord.SelectOption(label="Epic", value="epic"),
-            discord.SelectOption(label="Legendary", value="legendary"),
+            discord.SelectOption(label="Common ⚪", value="common"),
+            discord.SelectOption(label="Rare 🔵", value="rare"),
+            discord.SelectOption(label="Epic 🟣", value="epic"),
+            discord.SelectOption(label="Legendary 🟡", value="legendary"),
         ]
         super().__init__(placeholder="Filter by rarity…", options=options, min_values=1, max_values=1)
         self.parent_view = parent_view
 
     async def callback(self, interaction: discord.Interaction):
+        if interaction.user != self.parent_view.author:
+            await interaction.response.send_message("⚠️ This is not your inventory.", ephemeral=True)
+            return
+
         self.parent_view.current_rarity = self.values[0]
         self.parent_view.page = 0
         self.parent_view.update_card_select()
@@ -57,6 +66,10 @@ class CardSelect(discord.ui.Select):
         super().__init__(placeholder="Select a card…", options=options, min_values=1, max_values=1)
 
     async def callback(self, interaction: discord.Interaction):
+        if interaction.user != self.parent_view.author:
+            await interaction.response.send_message("⚠️ This is not your inventory.", ephemeral=True)
+            return
+
         card_id = int(self.values[0])
         card = next((c for c in self.parent_view.cards if c["card_id"] == card_id), None)
         if not card:
@@ -69,14 +82,16 @@ class CardSelect(discord.ui.Select):
             "speed": card.get("u_speed")
         })
 
-        embed = discord.Embed(
-            title=card["name"],
-            description=card["description"] or "No description available.",
-            color=RARITY_COLORS.get(card["rarity"], discord.Color.dark_gray())
-        )
-        embed.add_field(name="Rarity", value=card["rarity"].capitalize(), inline=True)
-        embed.add_field(name="Quantity", value=str(card["quantity"]), inline=True)
         potential_val = int(card["potential"]) if card["potential"] else 0
+        rarity = card["rarity"]
+
+        embed = discord.Embed(
+            title=f"{RARITY_EMOJIS.get(rarity,'')} {card['name']}",
+            description=card["description"] or "No description available.",
+            color=RARITY_COLORS.get(rarity, discord.Color.dark_gray())
+        )
+        embed.add_field(name="Rarity", value=rarity.capitalize(), inline=True)
+        embed.add_field(name="Quantity", value=str(card["quantity"]), inline=True)
         embed.add_field(name="Potential", value=("⭐" * potential_val) if potential_val > 0 else "—", inline=True)
         embed.add_field(name="Stats", value=format_stats(entity), inline=False)
 
@@ -101,8 +116,8 @@ class InventoryView(discord.ui.View):
         self.card_select: Optional[CardSelect] = None
         self.update_card_select()
 
-        prev_button = discord.ui.Button(label="⬅️", style=discord.ButtonStyle.secondary)
-        next_button = discord.ui.Button(label="➡️", style=discord.ButtonStyle.secondary)
+        prev_button = discord.ui.Button(label="⬅️ Prev", style=discord.ButtonStyle.secondary)
+        next_button = discord.ui.Button(label="Next ➡️", style=discord.ButtonStyle.secondary)
         prev_button.callback = lambda i: self.change_page(i, -1)
         next_button.callback = lambda i: self.change_page(i, +1)
         self.add_item(prev_button)
@@ -131,7 +146,7 @@ class InventoryView(discord.ui.View):
 
         embed = discord.Embed(
             title=f"🎴 {self.author.display_name}'s Inventory",
-            description=f"💰 Bloodcoins: **{self.balance}**\nPage {self.page+1}/{max(1, (len(filtered)-1)//self.per_page+1)}",
+            description=f"💰 Bloodcoins: **{self.balance:,}**\n📄 Page {self.page+1}/{max(1, (len(filtered)-1)//self.per_page+1)}",
             color=discord.Color.blurple()
         )
         embed.set_thumbnail(url=self.author.display_avatar.url)
@@ -147,9 +162,14 @@ class InventoryView(discord.ui.View):
                 "speed": c.get("u_speed")
             })
             potential_val = int(c["potential"]) if c["potential"] else 0
+            rarity = c["rarity"]
             embed.add_field(
-                name=f"{c['base_name']} ({c['rarity'].capitalize()})",
-                value=f"Qty: {c['quantity']} • {format_stats(entity)}\nPotential: {('⭐' * potential_val) if potential_val > 0 else '—'}",
+                name=f"{RARITY_EMOJIS.get(rarity,'')} {c['base_name']} ({rarity.capitalize()})",
+                value=(
+                    f"Qty: **{c['quantity']}**\n"
+                    f"{format_stats(entity)}\n"
+                    f"Potential: {('⭐' * potential_val) if potential_val > 0 else '—'}"
+                ),
                 inline=False
             )
         return embed
@@ -158,6 +178,7 @@ class InventoryView(discord.ui.View):
         if interaction.user != self.author:
             await interaction.response.send_message("⚠️ This is not your inventory.", ephemeral=True)
             return
+
         filtered = self.get_filtered_cards()
         max_page = (len(filtered) - 1) // self.per_page
         new_page = self.page + delta
@@ -177,9 +198,12 @@ class Inventory(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    async def show_inventory(self, interaction: discord.Interaction, user: discord.Member):
-        """Reusable helper for showing inventory (used by /inventory and profile button)."""
+    @commands.command(name="inventory")
+    async def inventory(self, ctx, member: Optional[discord.Member] = None):
+        """Show your inventory (or another user's if provided)."""
+        user = member or ctx.author
         user_id = int(user.id)
+
         async with self.bot.db.acquire() as conn:
             rows = await conn.fetch("""
                 SELECT
@@ -203,15 +227,12 @@ class Inventory(commands.Cog):
             balance = await conn.fetchval("SELECT bloodcoins FROM users WHERE user_id = $1", user_id)
 
         if not rows:
-            await interaction.response.send_message("📭 Your inventory is empty. Use `/draw` to get cards!", ephemeral=True)
+            await ctx.send("📭 Your inventory is empty. Use `!draw` to get cards!")
             return
 
         view = InventoryView(rows, balance, user)
-        await interaction.response.send_message(embed=view.format_page(), view=view, ephemeral=True)
-
-    @app_commands.command(name="inventory", description="Show your inventory")
-    async def inventory(self, interaction: discord.Interaction):
-        await self.show_inventory(interaction, interaction.user)
+        message = await ctx.send(embed=view.format_page(), view=view)
+        view.message = message
 
 
 async def setup(bot: commands.Bot):
