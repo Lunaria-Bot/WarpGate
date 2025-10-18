@@ -37,7 +37,7 @@ async def main():
         "cogs.profile",
         "cogs.wallet",
         "cogs.inventory",
-        "cogs.faction",
+        "cogs.announcement",
         "cogs.trade",
         "cogs.admin",
         "cogs.upgrade",
