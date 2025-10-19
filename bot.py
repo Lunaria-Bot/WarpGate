@@ -24,7 +24,7 @@ class MyBot(commands.Bot):
             "cogs.draw",
             "cogs.profile",
             "cogs.wallet",
-            "cogs.inventory",
+            "cogs.cards",
             "cogs.announcement",
             "cogs.trade",
             "cogs.admin",
