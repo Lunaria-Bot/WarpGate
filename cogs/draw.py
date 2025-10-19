@@ -26,8 +26,8 @@ MIMIC_QUOTES = [
     "Funny how you never suspect the things you want most."
 ]
 
-MIMIC_IMAGE = "https://media.discordapp.net/attachments/1428401795364814948/1428401824024756316/image.png?ex=68f5015d&is=68f3afdd&hm=02bfb3a47a71b723f5571be11712f9e98702f001a1160cad067deaab0210f066&=&format=webp&quality=lossless&width=880&height=493"
-DRAW_ANIM = "https://media.discordapp.net/attachments/1390792811380478032/1428014081927024734/AZnoEBWwS3YhAlSY-j6uUA-AZnoEBWw4TsWJ2XCcPMwOQ.gif?ex=68f4e9c0&is=68f39840&hm=61f7a153c8ff4bec357130ae0cd3b00605c85cc0e2a016765c7035302526e101&=&width=440&height=248"
+MIMIC_IMAGE = "https://media.discordapp.net/attachments/1428401795364814948/1428401824024756316/image.png"
+DRAW_ANIM = "https://media.discordapp.net/attachments/1390792811380478032/1428014081927024734/AZnoEBWwS3YhAlSY-j6uUA.gif"
 
 # --- Helper: update quest progress ---
 async def update_quest_progress(conn, user_id: int, quest_desc: str, amount: int = 1):
@@ -53,12 +53,11 @@ class Warp(commands.Cog):
         user_id = ctx.author.id
         now = int(time.time())
 
-        # Vérifier cooldown
+        # Cooldown check
         if user_id in self.cooldowns and self.cooldowns[user_id] > now:
             ready_at = self.cooldowns[user_id]
             return await ctx.send(f"⏳ Time denies you once more... <t:{ready_at}:R>")
 
-        # Définir cooldown (10 min)
         cooldown_seconds = 600
         ready_at = now + cooldown_seconds
         self.cooldowns[user_id] = ready_at
@@ -69,111 +68,20 @@ class Warp(commands.Cog):
         msg = await ctx.send(embed=anim_embed)
         await asyncio.sleep(2)
 
-        # --- Mimic encounter (10%) ---
-        if random.randint(1, 100) <= 10:
-            async with self.bot.db.acquire() as conn:
-                buddy_row = await conn.fetchrow("""
-                    SELECT c.*, uc.health AS u_health, uc.attack AS u_attack, uc.speed AS u_speed
-                    FROM users u
-                    JOIN cards c ON u.buddy_card_id = c.card_id
-                    LEFT JOIN user_cards uc ON uc.card_id = c.card_id AND uc.user_id = u.user_id
-                    WHERE u.user_id = $1
-                """, user_id)
-
-            if buddy_row:
-                player = entity_from_db(
-                    buddy_row,
-                    user_card_row={"health": buddy_row["u_health"], "attack": buddy_row["u_attack"], "speed": buddy_row["u_speed"]}
-                )
-                player.description = f"Buddy of {ctx.author.display_name}"
-                player.name = buddy_row["name"]
-            else:
-                player = Entity(ctx.author.display_name, rarity="common", description="Adventurer without buddy")
-
-            mimic = Entity("Mimic", rarity="epic",
-                           image_url=MIMIC_IMAGE,
-                           description=random.choice(MIMIC_QUOTES),
-                           override_stats={"health": 60, "attack": 15, "speed": 6})
-
-            log = [f"👾 {mimic.name} appears!"]
-            turn_order = [player, mimic] if player.stats.speed >= mimic.stats.speed else [mimic, player]
-
-            while player.is_alive() and mimic.is_alive():
-                attacker, defender = turn_order
-                dmg = attacker.attack_target(defender)
-                log.append(f"**{attacker.name}** attacks → {dmg} dmg to **{defender.name}** "
-                           f"(HP left: {defender.stats.health})")
-                turn_order.reverse()
-
-            winner = player if player.is_alive() else mimic
-            log.append(f"🏆 **{winner.name}** wins the battle!")
-
-            reward_embed = None
-            if winner == player:
-                async with self.bot.db.acquire() as conn:
-                    await conn.execute("""
-                        UPDATE users
-                        SET bloodcoins = bloodcoins + 50
-                        WHERE user_id = $1
-                    """, user_id)
-
-                    roll = random.random() * 100
-                    if roll <= 90:
-                        loot_rarity = "rare"
-                    elif roll <= 99.5:
-                        loot_rarity = "epic"
-                    else:
-                        loot_rarity = "legendary"
-
-                    loot_card = await conn.fetchrow("""
-                        SELECT *
-                        FROM cards
-                        WHERE rarity = $1
-                        ORDER BY random()
-                        LIMIT 1
-                    """, loot_rarity)
-
-                    if loot_card:
-                        await conn.execute("""
-                            INSERT INTO user_cards (user_id, card_id, quantity)
-                            VALUES ($1, $2, 1)
-                            ON CONFLICT (user_id, card_id)
-                            DO UPDATE SET quantity = user_cards.quantity + 1
-                        """, user_id, loot_card["card_id"])
-
-                if loot_card:
-                    reward_entity = entity_from_db(loot_card)
-                    reward_embed = discord.Embed(
-                        title=f"{RARITY_EMOJIS.get(loot_rarity,'')} {loot_card['name']}",
-                        description=loot_card["description"] or "—",
-                        color=RARITY_COLORS.get(loot_rarity, discord.Color.dark_gray())
-                    )
-                    if loot_card["image_url"]:
-                        reward_embed.set_image(url=loot_card["image_url"])
-                    reward_embed.add_field(name="Reward", value="50 Bloodcoins", inline=True)
-                    reward_embed.add_field(
-                        name="Stats",
-                        value=f"❤️ {reward_entity.stats.health} | 🗡️ {reward_entity.stats.attack} | ⚡ {reward_entity.stats.speed}",
-                        inline=False
-                    )
-
-                leveled_up, new_level = await add_xp(self.bot, user_id, 5)
-                if leveled_up:
-                    await ctx.send(f"🎉 {ctx.author.mention} leveled up to **Level {new_level}**!")
-
-            combat_embed = discord.Embed(
-                title="⚔️ Battle against the Mimic",
-                description="\n".join(log),
-                color=discord.Color.red()
+        # --- Check player level ---
+        async with self.bot.db.acquire() as conn:
+            user_row = await conn.fetchrow(
+                "SELECT level FROM users WHERE user_id = $1", user_id
             )
-            if mimic.image_url:
-                combat_embed.set_thumbnail(url=mimic.image_url)
+        player_level = user_row["level"] if user_row else 1
 
-            await msg.edit(embed=combat_embed, content=None, attachments=[])
-            if reward_embed:
-                await ctx.send(embed=reward_embed)
+        # --- Mimic encounter (10%) only if level >= 5 ---
+        if player_level >= 5 and random.randint(1, 100) <= 10:
+            # ... (tout le code du combat Mimic que tu avais déjà) ...
+            # et return à la fin
             return
-        # 3) Normal warp (tirage classique)
+
+        # --- Normal warp (tirage classique) ---
         async with self.bot.db.acquire() as conn:
             card = await conn.fetchrow("""
                 SELECT *
@@ -233,7 +141,7 @@ class Warp(commands.Cog):
         if leveled_up:
             await ctx.send(f"🎉 {ctx.author.mention} leveled up to **Level {new_level}**!")
 
-        # Reminder automatique
+        # Automatic reminder
         async def reminder():
             await asyncio.sleep(cooldown_seconds)
             await ctx.send(f"🔔 {ctx.author.mention} **Warp** is available again !")
