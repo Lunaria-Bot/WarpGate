@@ -27,7 +27,7 @@ MIMIC_QUOTES = [
 ]
 
 MIMIC_IMAGE = "https://media.discordapp.net/attachments/1428401795364814948/1428401824024756316/image.png"
-DRAW_ANIM = "https://media.discordapp.net/attachments/1390792811380478032/1428014081927024734/AZnoEBWwS3YhAlSY-j6uUA.gif"
+DRAW_ANIM = "https://media.discordapp.net/attachments/1390792811380478032/1428014081927024734/AZnoEBWwS3YhAlSY-j6uUA-AZnoEBWw4TsWJ2XCcPMwOQ.gif?ex=68f63b40&is=68f4e9c0&hm=1ac8ac005b79134db4e19dff962a32bad38b326d28aa8e230cf3941e019adf8e&=&width=440&height=248"
 
 # --- Helper: update quest progress ---
 async def update_quest_progress(conn, user_id: int, quest_desc: str, amount: int = 1):
