@@ -19,7 +19,11 @@ class RaritySelect(discord.ui.Select):
         self.view_ref.rarity = self.values[0]
         self.view_ref.page = 0
         self.view_ref.detail_mode = False
+
+        # Refresh page_cards before rebuilding controls
+        await self.view_ref.build_embed()
         self.view_ref.refresh()
+
         await interaction.response.edit_message(
             embed=await self.view_ref.build_embed(), view=self.view_ref
         )
@@ -36,7 +40,10 @@ class PrevButton(discord.ui.Button):
         if self.view_ref.page > 0:
             self.view_ref.page -= 1
         self.view_ref.detail_mode = False
+
+        await self.view_ref.build_embed()
         self.view_ref.refresh()
+
         await interaction.response.edit_message(
             embed=await self.view_ref.build_embed(), view=self.view_ref
         )
@@ -55,7 +62,10 @@ class NextButton(discord.ui.Button):
         if self.view_ref.page < max_page:
             self.view_ref.page += 1
         self.view_ref.detail_mode = False
+
+        await self.view_ref.build_embed()
         self.view_ref.refresh()
+
         await interaction.response.edit_message(
             embed=await self.view_ref.build_embed(), view=self.view_ref
         )
@@ -72,7 +82,10 @@ class MainMenuButton(discord.ui.Button):
         self.view_ref.rarity = "All"
         self.view_ref.page = 0
         self.view_ref.detail_mode = False
+
+        await self.view_ref.build_embed()
         self.view_ref.refresh()
+
         await interaction.response.edit_message(
             embed=await self.view_ref.build_embed(), view=self.view_ref
         )
@@ -113,6 +126,7 @@ class CardSelect(discord.ui.Select):
         self.view_ref.detail_mode = True
         self.view_ref.detail_embed = embed
         self.view_ref.refresh()
+
         await interaction.response.edit_message(embed=embed, view=self.view_ref)
 
 
@@ -125,7 +139,10 @@ class BackToListButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         self.view_ref.detail_mode = False
+
+        await self.view_ref.build_embed()
         self.view_ref.refresh()
+
         await interaction.response.edit_message(
             embed=await self.view_ref.build_embed(), view=self.view_ref
         )
