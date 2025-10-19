@@ -1,6 +1,5 @@
 import discord
 from discord.ext import commands
-from db import init_db
 
 CARDS_PER_PAGE = 5
 RARITIES = ["All", "Common", "Rare", "Epic", "Legendary"]
@@ -110,12 +109,11 @@ class MainMenuButton(discord.ui.Button):
 class Cards(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.pool = db.pool  # WarpGate’s db.py exposes a global pool
 
     @commands.command(name="view")
     async def view_cards(self, ctx):
         """View cards with rarity filter and pagination"""
-        view = CardView(ctx, self.pool)
+        view = CardView(ctx, self.bot.db)  # use self.bot.db like in draw.py
         await ctx.send(embed=await view.get_embed(), view=view)
 
 async def setup(bot):
