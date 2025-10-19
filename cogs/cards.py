@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-import asyncpg
+from utils import db  # WarpGate already has db.py for asyncpg pool
 
 CARDS_PER_PAGE = 5
 RARITIES = ["All", "Common", "Rare", "Epic", "Legendary"]
@@ -18,7 +18,10 @@ class CardView(discord.ui.View):
         async with self.pool.acquire() as conn:
             if self.rarity == "All":
                 return await conn.fetch("SELECT id, name, rarity FROM cards ORDER BY id ASC")
-            return await conn.fetch("SELECT id, name, rarity FROM cards WHERE rarity=$1 ORDER BY id ASC", self.rarity.lower())
+            return await conn.fetch(
+                "SELECT id, name, rarity FROM cards WHERE rarity=$1 ORDER BY id ASC",
+                self.rarity.lower()
+            )
 
     async def get_embed(self):
         cards = await self.fetch_cards()
@@ -35,7 +38,11 @@ class CardView(discord.ui.View):
             embed.add_field(name="No cards", value="No cards available for this filter.")
         else:
             for c in page_cards:
-                embed.add_field(name=f"#{c['id']} {c['name']}", value=f"Rarity: {c['rarity'].capitalize()}", inline=False)
+                embed.add_field(
+                    name=f"#{c['id']} {c['name']}",
+                    value=f"Rarity: {c['rarity'].capitalize()}",
+                    inline=False
+                )
         return embed
 
     def update_items(self):
@@ -55,7 +62,9 @@ class RaritySelect(discord.ui.Select):
         self.view_ref.rarity = self.values[0]
         self.view_ref.page = 0
         self.view_ref.update_items()
-        await interaction.response.edit_message(embed=await self.view_ref.get_embed(), view=self.view_ref)
+        await interaction.response.edit_message(
+            embed=await self.view_ref.get_embed(), view=self.view_ref
+        )
 
 class PrevButton(discord.ui.Button):
     def __init__(self, view):
@@ -66,7 +75,9 @@ class PrevButton(discord.ui.Button):
         if self.view_ref.page > 0:
             self.view_ref.page -= 1
         self.view_ref.update_items()
-        await interaction.response.edit_message(embed=await self.view_ref.get_embed(), view=self.view_ref)
+        await interaction.response.edit_message(
+            embed=await self.view_ref.get_embed(), view=self.view_ref
+        )
 
 class NextButton(discord.ui.Button):
     def __init__(self, view):
@@ -79,7 +90,9 @@ class NextButton(discord.ui.Button):
         if self.view_ref.page < max_page:
             self.view_ref.page += 1
         self.view_ref.update_items()
-        await interaction.response.edit_message(embed=await self.view_ref.get_embed(), view=self.view_ref)
+        await interaction.response.edit_message(
+            embed=await self.view_ref.get_embed(), view=self.view_ref
+        )
 
 class MainMenuButton(discord.ui.Button):
     def __init__(self, view):
@@ -90,12 +103,14 @@ class MainMenuButton(discord.ui.Button):
         self.view_ref.rarity = "All"
         self.view_ref.page = 0
         self.view_ref.update_items()
-        await interaction.response.edit_message(embed=await self.view_ref.get_embed(), view=self.view_ref)
+        await interaction.response.edit_message(
+            embed=await self.view_ref.get_embed(), view=self.view_ref
+        )
 
 class Cards(commands.Cog):
-    def __init__(self, bot, pool):
+    def __init__(self, bot):
         self.bot = bot
-        self.pool = pool
+        self.pool = db.pool  # WarpGate’s db.py exposes a global pool
 
     @commands.command(name="view")
     async def view_cards(self, ctx):
@@ -104,5 +119,4 @@ class Cards(commands.Cog):
         await ctx.send(embed=await view.get_embed(), view=view)
 
 async def setup(bot):
-    # Expect bot.pool to be set in bot.py
-    await bot.add_cog(Cards(bot, bot.pool))
+    await bot.add_cog(Cards(bot))
