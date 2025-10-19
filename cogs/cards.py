@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-from utils import db  # WarpGate already has db.py for asyncpg pool
+from db import init_db
 
 CARDS_PER_PAGE = 5
 RARITIES = ["All", "Common", "Rare", "Epic", "Legendary"]
