@@ -187,12 +187,15 @@ class CardView(discord.ui.View):
         if self.detail_mode:
             self.add_item(BackToListButton(self))
         else:
+            # Top controls
             self.add_item(RaritySelect(self))
+            if self.page_cards:
+                self.add_item(CardSelect(self, self.page_cards))
+
+            # Bottom controls
             self.add_item(PrevButton(self))
             self.add_item(NextButton(self))
             self.add_item(MainMenuButton(self))
-            if self.page_cards:
-                self.add_item(CardSelect(self, self.page_cards))
 
 
 # --- Cog ---
