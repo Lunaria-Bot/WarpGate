@@ -1,0 +1,25 @@
+import uuid
+from datetime import datetime
+from sqlalchemy import Column, Integer, String, Text, DateTime, Enum
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.ext.declarative import declarative_base
+
+Base = declarative_base()
+
+class Card(Base):
+    __tablename__ = "cards"
+
+    id = Column(Integer, primary_key=True)
+    uuid = Column(UUID(as_uuid=True), default=uuid.uuid4, unique=True, nullable=False)
+    code = Column(String, unique=True, nullable=False)
+    character_name = Column(String, nullable=False)
+    form = Column(Enum("base", "awakened", "event", name="card_form"), default="base", nullable=False)
+    image_url = Column(String, nullable=False)
+    description = Column(Text)
+    event_name = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def generate_code(self):
+        timestamp = int(self.created_at.timestamp())
+        short = str(self.uuid).split("-")[0].upper()
+        return f"{self.id}-{short}-{timestamp}"
