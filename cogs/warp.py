@@ -7,9 +7,10 @@ import time
 from models.card import Card
 from models.user_card import UserCard
 from utils.leveling import add_xp
+from utils.db import db_transaction
 from datetime import datetime
 
-DRAW_ANIM = "https://yourcdn.com/animations/warp.gif"  # ton animation de warp
+DRAW_ANIM = "https://media.discordapp.net/attachments/1390792811380478032/1428014081927024734/AZnoEBWwS3YhAlSY-j6uUA-AZnoEBWw4TsWJ2XCcPMwOQ.gif?ex=68f78cc0&is=68f63b40&hm=f37e1354814e7a4223fe46e2e06a6af88c23c4cc81f5329ed771374e81ade3ca&=&width=440&height=248"
 FORM_EMOJIS = {
     "base": "🟦",
     "awakened": "✨",
@@ -30,14 +31,19 @@ class WarpDropView(View):
         self.card2 = card2
         self.claimed = False
 
+        self.add_item(Button(label="Claim Left", style=discord.ButtonStyle.primary, custom_id="left"))
+        self.add_item(Button(label="Claim Right", style=discord.ButtonStyle.primary, custom_id="right"))
+
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return interaction.user.id == self.user.id
 
     async def on_timeout(self):
         for item in self.children:
             item.disabled = True
+        if self.message:
+            await self.message.edit(view=self)
 
-    async def claim_card(self, interaction: discord.Interaction, card):
+    async def interaction_handler(self, interaction: discord.Interaction, card):
         if self.claimed:
             await interaction.response.send_message("❌ You already claimed a card.", ephemeral=True)
             return
@@ -47,45 +53,55 @@ class WarpDropView(View):
             item.disabled = True
         await interaction.response.edit_message(view=self)
 
-        async with self.bot.db.begin() as session:
-            session.add(card)
-            await session.flush()
-            card.code = card.generate_code()
-            session.add(UserCard(user_id=interaction.user.id, card_id=card.id))
-            await session.execute("""
-                UPDATE users SET bloodcoins = bloodcoins + 10 WHERE user_id = :uid
-            """, {"uid": interaction.user.id})
-            await session.commit()
+        async with db_transaction(self.bot.db) as conn:
+            await conn.execute("""
+                INSERT INTO cards (character_name, form, image_url, description, created_at, code)
+                VALUES ($1, $2, $3, $4, $5, $6)
+            """, card.character_name, card.form, card.image_url, card.description, card.created_at, card.code)
+
+            card_id = await conn.fetchval("SELECT id FROM cards WHERE code = $1", card.code)
+
+            await conn.execute("""
+                INSERT INTO user_cards (user_id, card_id, quantity)
+                VALUES ($1, $2, 1)
+                ON CONFLICT (user_id, card_id)
+                DO UPDATE SET quantity = user_cards.quantity + 1
+            """, self.user.id, card_id)
+
+            await conn.execute("UPDATE users SET bloodcoins = bloodcoins + 10 WHERE user_id = $1", self.user.id)
 
         await interaction.followup.send(
             f"✅ You claimed **{card.character_name}**!\nForm: `{card.form}`\nCode: `{card.code}`",
             ephemeral=True
         )
 
-        # Gain buddy XP
-        await gain_buddy_xp(self.bot, interaction.user.id, amount=10)
-
-        # Gain player XP
-        leveled_up, new_level = await add_xp(self.bot, interaction.user.id, 5)
+        await gain_buddy_xp(self.bot, self.user.id, amount=10)
+        leveled_up, new_level = await add_xp(self.bot, self.user.id, 5)
         if leveled_up:
             await interaction.followup.send(f"🎉 You leveled up to **Level {new_level}**!", ephemeral=True)
 
+    @discord.ui.button(label="Claim Left", style=discord.ButtonStyle.primary)
+    async def claim_left(self, interaction: discord.Interaction, button: Button):
+        await self.interaction_handler(interaction, self.card1)
+
+    @discord.ui.button(label="Claim Right", style=discord.ButtonStyle.primary)
+    async def claim_right(self, interaction: discord.Interaction, button: Button):
+        await self.interaction_handler(interaction, self.card2)
+
 async def gain_buddy_xp(bot, user_id: int, amount: int):
-    async with bot.db.begin() as session:
-        buddy_id = await session.scalar(
-            "SELECT buddy_card_id FROM users WHERE user_id = :uid", {"uid": user_id}
-        )
+    async with db_transaction(bot.db) as conn:
+        buddy_id = await conn.fetchval("SELECT buddy_card_id FROM users WHERE user_id = $1", user_id)
         if not buddy_id:
             return
 
-        await session.execute("""
+        await conn.execute("""
             UPDATE user_cards
-            SET xp = xp + :amount,
-                health = 100 + ((xp + :amount) / 100)::int * 5,
-                attack = 10 + ((xp + :amount) / 100)::int * 2,
-                speed = 10 + ((xp + :amount) / 100)::int * 1
-            WHERE user_id = :uid AND card_id = :cid
-        """, {"amount": amount, "uid": user_id, "cid": buddy_id})
+            SET xp = xp + $1,
+                health = 100 + ((xp + $1) / 100)::int * 5,
+                attack = 10 + ((xp + $1) / 100)::int * 2,
+                speed = 10 + ((xp + $1) / 100)::int * 1
+            WHERE user_id = $2 AND card_id = $3
+        """, amount, user_id, buddy_id)
 
 class Warp(commands.Cog):
     def __init__(self, bot):
@@ -97,7 +113,6 @@ class Warp(commands.Cog):
         user_id = ctx.author.id
         now = int(time.time())
 
-        # Cooldown check
         if user_id in self.cooldowns and self.cooldowns[user_id] > now:
             ready_at = self.cooldowns[user_id]
             return await ctx.send(f"⏳ Time denies you once more... <t:{ready_at}:R>")
@@ -106,38 +121,35 @@ class Warp(commands.Cog):
         ready_at = now + cooldown_seconds
         self.cooldowns[user_id] = ready_at
 
-        # Animation
         anim_embed = discord.Embed(description="🎴 Warping...", color=discord.Color.blurple())
         anim_embed.set_image(url=DRAW_ANIM)
         msg = await ctx.send(embed=anim_embed)
         await asyncio.sleep(2)
 
-        # Draw 2 random base cards
-        async with self.bot.db.begin() as session:
-            result = await session.execute(
-                "SELECT * FROM cards WHERE form = 'base' ORDER BY random() LIMIT 2"
-            )
-            rows = result.fetchall()
+        async with db_transaction(self.bot.db) as conn:
+            rows = await conn.fetch("""
+                SELECT character_name, form, image_url, description
+                FROM cards
+                WHERE form = 'base'
+                ORDER BY random()
+                LIMIT 2
+            """)
             if len(rows) < 2:
                 await msg.edit(content="⚠️ Not enough cards available.", embed=None)
                 return
 
-            cards = []
-            for row in rows:
-                card = Card(
-                    character_name=row.character_name,
-                    form=row.form,
-                    image_url=row.image_url,
-                    description=row.description,
-                    created_at=datetime.utcnow()
-                )
-                session.add(card)
-                await session.flush()
-                card.code = card.generate_code()
-                cards.append(card)
-            await session.commit()
+        cards = []
+        for row in rows:
+            card = Card(
+                character_name=row["character_name"],
+                form=row["form"],
+                image_url=row["image_url"],
+                description=row["description"],
+                created_at=datetime.utcnow()
+            )
+            card.code = card.generate_code()
+            cards.append(card)
 
-        # Embed with both cards
         embed = discord.Embed(
             title="🌌 Warp Drop",
             description="Choose one card to claim!",
@@ -147,9 +159,9 @@ class Warp(commands.Cog):
         embed.set_thumbnail(url=cards[1].image_url)
 
         view = WarpDropView(self.bot, ctx.author, cards[0], cards[1])
+        view.message = msg
         await msg.edit(embed=embed, view=view)
 
-        # Reminder
         async def reminder():
             await asyncio.sleep(cooldown_seconds)
             await ctx.send(f"🔔 {ctx.author.mention} **Warp** is available again!")
