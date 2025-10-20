@@ -2,6 +2,7 @@ import asyncio
 import discord
 from discord.ext import commands
 from config import settings
+from db import init_db
 from redis_client import init_redis
 
 intents = discord.Intents.default()
@@ -13,26 +14,16 @@ class MyBot(commands.Bot):
         super().__init__(command_prefix=settings.BOT_PREFIX, intents=intents)
 
     async def setup_hook(self):
-        # Attach DB and Redis before loading cogs
         self.db = await init_db()
         self.redis = await init_redis()
 
-        # Liste des cogs à charger
+        # ✅ Cogs utilisés actuellement
         extensions = [
-            "cogs.register",
-            "cogs.draw",
-            "cogs.profile",
-            "cogs.wallet",
-            "cogs.inventory",     # ✅ contient la commande minventory
-            "cogs.announcement",
-            "cogs.cards",         # ✅ contient warpdrop et drop
-            "cogs.admin",
-            "cogs.upgrade",
-            "cogs.cooldown_reset",
-            "cogs.daily",
-            "cogs.quests",
-            "cogs.butcher",
-            "cogs.buddy"
+            "cogs.register",     # Création de profil + carte de départ
+            "cogs.daily",        # Récompense quotidienne + buddy XP
+            "cogs.profile",      # Affichage du profil
+            "cogs.inventory",    # Inventaire visuel avec stats et niveau
+            "cogs.warp"          # Tirage interactif avec cooldown, buddy XP, animation
         ]
 
         for ext in extensions:
@@ -42,8 +33,7 @@ class MyBot(commands.Bot):
             except Exception as e:
                 print(f"❌ Erreur chargement {ext}: {e}")
 
-        # --- Slash command sync ---
-        guild = discord.Object(id=1399784437440319508)  # ton serveur
+        guild = discord.Object(id=1399784437440319508)  # Ton serveur
         try:
             synced = await self.tree.sync(guild=guild)
             print(f"✅ Synced {len(synced)} slash command(s) to guild {guild.id}")
