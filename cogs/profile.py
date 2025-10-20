@@ -34,7 +34,8 @@ class Profile(commands.Cog):
                     COUNT(*) AS total,
                     COUNT(*) FILTER (WHERE c.form = 'base') AS base,
                     COUNT(*) FILTER (WHERE c.form = 'awakened') AS awakened,
-                    COUNT(*) FILTER (WHERE c.form = 'event') AS event
+                    COUNT(*) FILTER (WHERE c.form = 'event') AS event,
+                    MAX(uc.xp) AS buddy_xp
                 FROM user_cards uc
                 JOIN cards c ON c.id = uc.card_id
                 WHERE uc.user_id = $1
@@ -48,18 +49,15 @@ class Profile(commands.Cog):
                     WHERE id = $1
                 """, profile["buddy_card_id"])
 
-        # --- Embed ---
         embed = discord.Embed(
             title=f"👤 Profile of {user.display_name}",
             color=discord.Color.gold() if (stats and stats["awakened"]) else discord.Color.blurple()
         )
         embed.set_thumbnail(url=user.display_avatar.url)
 
-        # Currency
         embed.add_field(name="💰 BloodCoins", value=f"{profile['bloodcoins']:,}", inline=True)
         embed.add_field(name="💎 Noble Coins", value=f"{profile['noble_coins']:,}", inline=True)
 
-        # Level & XP
         xp = profile.get("xp", 0) or 0
         xp_next = profile.get("xp_next", 100) or 100
         level = profile.get("level", 1) or 1
@@ -71,18 +69,15 @@ class Profile(commands.Cog):
             inline=False
         )
 
-        # Dates
         if profile["created_at"]:
             embed.add_field(name="📅 Created", value=profile["created_at"].strftime("%d %b %Y"), inline=True)
         if profile["updated_at"]:
             embed.add_field(name="🔄 Last Update", value=profile["updated_at"].strftime("%d %b %Y"), inline=True)
 
-        # Ban status
         if profile["banned"]:
             reason = profile["ban_reason"] or "No reason provided"
             embed.add_field(name="⛔ Account Status", value=f"BANNED\nReason: {reason}", inline=False)
 
-        # Collection
         if stats:
             collection = (
                 f"**Total:** {stats['total'] or 0}\n"
@@ -92,13 +87,15 @@ class Profile(commands.Cog):
             )
             embed.add_field(name="🃏 Collection", value=collection, inline=False)
 
-        # Buddy
+        if stats["buddy_xp"]:
+            level = stats["buddy_xp"] // 100 + 1
+            embed.add_field(name="🐾 Buddy Level", value=f"Lvl {level} ({stats['buddy_xp']} XP)", inline=True)
+
         if buddy:
             embed.add_field(name="🐾 Buddy", value=buddy["character_name"], inline=False)
             if buddy["image_url"]:
                 embed.set_image(url=buddy["image_url"])
 
-        # Achievements / Badges
         achievements = []
         if stats and stats["awakened"]:
             achievements.append("✨ Awakened Collector")
@@ -109,7 +106,6 @@ class Profile(commands.Cog):
         embed.add_field(name="🎖️ Achievements", value=", ".join(achievements) or "—", inline=False)
 
         await ctx.send(embed=embed)
-
 
 async def setup(bot):
     await bot.add_cog(Profile(bot))
