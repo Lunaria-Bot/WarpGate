@@ -11,29 +11,29 @@ intents.members = True
 
 class MyBot(commands.Bot):
     def __init__(self):
-        super().__init__(command_prefix=settings.BOT_PREFIX, intents=intents)
+        super().__init__(command_prefix="w", intents=intents)
 
     async def setup_hook(self):
         self.db = await init_db()
         self.redis = await init_redis()
 
-        # ✅ Cogs utilisés actuellement
         extensions = [
-            "cogs.register",     # Création de profil + carte de départ
-            "cogs.daily",        # Récompense quotidienne + buddy XP
-            "cogs.profile",      # Affichage du profil
-            "cogs.inventory",    # Inventaire visuel avec stats et niveau
-            "cogs.warp"          # Tirage interactif avec cooldown, buddy XP, animation
+            "cogs.register",
+            "cogs.daily",
+            "cogs.inventory",
+            "cogs.warp",
+            "cogs.profile",
+            "cogs.admin"
         ]
 
         for ext in extensions:
             try:
                 await self.load_extension(ext)
-                print(f"🔹 Cog chargé: {ext}")
+                print(f"🔹 Cog loaded: {ext}")
             except Exception as e:
-                print(f"❌ Erreur chargement {ext}: {e}")
+                print(f"❌ Error loading {ext}: {e}")
 
-        guild = discord.Object(id=1399784437440319508)  # Ton serveur
+        guild = discord.Object(id=1399784437440319508)
         try:
             synced = await self.tree.sync(guild=guild)
             print(f"✅ Synced {len(synced)} slash command(s) to guild {guild.id}")
@@ -41,16 +41,16 @@ class MyBot(commands.Bot):
             print(f"❌ Error syncing commands: {e}")
 
     async def on_ready(self):
-        print(f"✅ Connecté en tant que {self.user} (ID: {self.user.id})")
-        print("📜 Commandes prefix disponibles :")
+        print(f"✅ Logged in as {self.user} (ID: {self.user.id})")
+        print("📜 Available prefix commands:")
         for cmd in self.commands:
-            print(f" - {settings.BOT_PREFIX}{cmd.name}")
-        print("Bot prêt à l’action !")
+            print(f" - w{cmd.name}")
+        print("Bot is ready!")
 
     async def on_command_error(self, ctx, error):
         if isinstance(error, commands.CommandNotFound):
             return
-        await ctx.send(f"⚠️ Erreur: {error}")
+        await ctx.send(f"⚠️ Error: {error}")
 
 async def main():
     bot = MyBot()
