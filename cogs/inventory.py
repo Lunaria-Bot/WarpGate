@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from typing import Optional
 from .entities import entity_from_db
+from utils.db import db_transaction  # helper context manager
 
 FORM_EMOJIS = {
     "base": "🟦",
@@ -193,7 +194,7 @@ class Inventory(commands.Cog):
         user = member or ctx.author
         user_id = int(user.id)
 
-        async with self.bot.db.acquire() as conn:
+        async with db_transaction(self.bot.db) as conn:
             rows = await conn.fetch("""
                 SELECT
                     c.id AS card_id, c.character_name, c.form, c.image_url, c.description,
@@ -202,7 +203,7 @@ class Inventory(commands.Cog):
                 FROM user_cards uc
                 JOIN cards c ON c.id = uc.card_id
                 WHERE uc.user_id = $1
-                                ORDER BY 
+                ORDER BY 
                     CASE c.form
                         WHEN 'awakened' THEN 1
                         WHEN 'event' THEN 2
