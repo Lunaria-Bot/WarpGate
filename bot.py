@@ -2,12 +2,11 @@ import asyncio
 import discord
 from discord.ext import commands
 from config import settings
-from db import init_db
 from redis_client import init_redis
 
 intents = discord.Intents.default()
-intents.message_content = True   # indispensable pour les commandes prefix
-intents.members = True           # utile pour factions/profils
+intents.message_content = True
+intents.members = True
 
 class MyBot(commands.Bot):
     def __init__(self):
@@ -24,9 +23,9 @@ class MyBot(commands.Bot):
             "cogs.draw",
             "cogs.profile",
             "cogs.wallet",
-            "cogs.inventory",
+            "cogs.inventory",     # ✅ contient la commande minventory
             "cogs.announcement",
-            "cogs.cards",
+            "cogs.cards",         # ✅ contient warpdrop et drop
             "cogs.admin",
             "cogs.upgrade",
             "cogs.cooldown_reset",
@@ -59,11 +58,9 @@ class MyBot(commands.Bot):
         print("Bot prêt à l’action !")
 
     async def on_command_error(self, ctx, error):
-        # Ignore CommandNotFound to avoid spam
         if isinstance(error, commands.CommandNotFound):
             return
         await ctx.send(f"⚠️ Erreur: {error}")
-
 
 async def main():
     bot = MyBot()
