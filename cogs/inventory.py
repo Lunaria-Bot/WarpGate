@@ -13,7 +13,6 @@ FORM_COLORS = {
     "awakened": discord.Color.gold(),
     "event": discord.Color.magenta()
 }
-FORM_ORDER = ["awakened", "event", "base"]
 
 def format_stats(entity) -> str:
     return f"❤️ {entity.stats.health} | 🗡️ {entity.stats.attack} | 💨 {entity.stats.speed}"
@@ -203,7 +202,7 @@ class Inventory(commands.Cog):
                 FROM user_cards uc
                 JOIN cards c ON c.id = uc.card_id
                 WHERE uc.user_id = $1
-                ORDER BY 
+                                ORDER BY 
                     CASE c.form
                         WHEN 'awakened' THEN 1
                         WHEN 'event' THEN 2
@@ -214,14 +213,13 @@ class Inventory(commands.Cog):
 
             balance = await conn.fetchval("SELECT bloodcoins FROM users WHERE user_id = $1", user_id)
 
-              if not rows:
-            await ctx.send("📭 Your inventory is empty. Use `mdraw` to get cards!")
+        if not rows:
+            await ctx.send("📭 Your inventory is empty. Use `mwarp` to get cards!")
             return
 
         view = InventoryView(rows, balance, user)
         message = await ctx.send(embed=view.format_page(), view=view)
         view.message = message
-
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Inventory(bot))
