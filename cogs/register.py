@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+from utils.db import db_transaction  # helper context manager
 
 class Register(commands.Cog):
     def __init__(self, bot):
@@ -11,47 +12,40 @@ class Register(commands.Cog):
         user_id = int(ctx.author.id)
         username = str(ctx.author.display_name)
 
-        async with self.bot.db.begin() as session:
-            # Check if profile already exists
-            exists = await session.scalar(
-                "SELECT 1 FROM users WHERE user_id = :uid", {"uid": user_id}
-            )
+        async with db_transaction(self.bot.db) as conn:
+            exists = await conn.fetchval("SELECT 1 FROM users WHERE user_id = $1", user_id)
             if exists:
                 await ctx.send(f"⚠️ {ctx.author.display_name}, you already have a profile.")
                 return
 
-            # Create profile with 1000 BloodCoins
-            await session.execute("""
+            await conn.execute("""
                 INSERT INTO users (user_id, username, bloodcoins)
-                VALUES (:uid, :uname, 1000)
-            """, {"uid": user_id, "uname": username})
+                VALUES ($1, $2, 1000)
+            """, user_id, username)
 
-            # Select a random base card
-            result = await session.execute(
-                "SELECT id, character_name, form, image_url, description FROM cards WHERE form = 'base' ORDER BY random() LIMIT 1"
-            )
-            card = result.fetchone()
-            if not card:
-                await ctx.send("⚠️ No base cards available to assign.")
-                return
+            card = await conn.fetchrow("""
+                SELECT id, character_name, form, image_url, description
+                FROM cards
+                WHERE form = 'base'
+                ORDER BY random()
+                LIMIT 1
+            """)
 
-            # Add card to inventory
-            await session.execute("""
+            await conn.execute("""
                 INSERT INTO user_cards (user_id, card_id, quantity)
-                VALUES (:uid, :cid, 1)
+                VALUES ($1, $2, 1)
                 ON CONFLICT (user_id, card_id)
                 DO UPDATE SET quantity = user_cards.quantity + 1
-            """, {"uid": user_id, "cid": card.id})
+            """, user_id, card["id"])
 
-        # Confirmation embed
         embed = discord.Embed(
             title="✅ Profile Created!",
             description=f"A new profile has been created for **{ctx.author.display_name}**.",
             color=discord.Color.green()
         )
         embed.add_field(name="💰 Starting Balance", value="1,000 BloodCoins", inline=True)
-        embed.add_field(name="🎴 Starter Card", value=f"{card.character_name} (`{card.form}`)", inline=True)
-        embed.set_thumbnail(url=card.image_url or ctx.author.display_avatar.url)
+        embed.add_field(name="🎴 Starter Card", value=f"{card['character_name']} (`{card['form']}`)", inline=True)
+        embed.set_thumbnail(url=card["image_url"] or ctx.author.display_avatar.url)
 
         await ctx.send(embed=embed)
 
