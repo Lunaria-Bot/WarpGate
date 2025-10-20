@@ -108,7 +108,7 @@ class Warp(commands.Cog):
         self.bot = bot
         self.cooldowns = {}
 
-    @commands.command(name="warp", aliases=["wd", "warpdrop"])
+    @commands.command(name="warp", aliases=["w"])
     async def warp(self, ctx):
         user_id = ctx.author.id
         now = int(time.time())
@@ -168,7 +168,7 @@ class Warp(commands.Cog):
 
         self.bot.loop.create_task(reminder())
 
-    @commands.command(name="cooldown")
+    @commands.command(name="cooldown", aliases=["cd"])
     async def cooldown(self, ctx):
         user_id = ctx.author.id
         now = int(time.time())
