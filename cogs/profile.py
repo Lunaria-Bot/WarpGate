@@ -11,7 +11,7 @@ class Profile(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="profile")
+    @commands.command(name="profile", aliases=["p"])
     async def profile(self, ctx, member: discord.Member = None):
         user = member or ctx.author
         user_id = user.id
