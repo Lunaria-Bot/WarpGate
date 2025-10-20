@@ -38,7 +38,7 @@ class Daily(commands.Cog):
         self.bot = bot
         self.cooldowns = {}
 
-    @commands.command(name="daily")
+    @commands.command(name="daily", aliases=["d"])
     async def daily(self, ctx):
         user_id = int(ctx.author.id)
         now = datetime.datetime.utcnow()
