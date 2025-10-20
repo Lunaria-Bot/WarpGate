@@ -2,3 +2,4 @@ discord.py
 asyncpg
 redis
 pydantic-settings
+SQLAlchemy>=1.4
