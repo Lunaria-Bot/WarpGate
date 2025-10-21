@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from typing import Optional
 from .entities import entity_from_db
-from utils.db import db_transaction  # helper context manager
+from utils.db import db_transaction
 
 FORM_EMOJIS = {
     "base": "🟦",
@@ -192,7 +192,7 @@ class Inventory(commands.Cog):
     @commands.command(name="inventory", aliases=["inv"])
     async def inventory(self, ctx, member: Optional[discord.Member] = None):
         user = member or ctx.author
-        user_id = int(user.id)
+        discord_id = str(user.id)
 
         async with db_transaction(self.bot.db) as conn:
             rows = await conn.fetch("""
@@ -202,7 +202,7 @@ class Inventory(commands.Cog):
                     uc.health AS u_health, uc.attack AS u_attack, uc.speed AS u_speed
                 FROM user_cards uc
                 JOIN cards c ON c.id = uc.card_id
-                WHERE uc.user_id = $1
+                WHERE uc.discord_id = $1
                 ORDER BY 
                     CASE c.form
                         WHEN 'awakened' THEN 1
@@ -210,12 +210,12 @@ class Inventory(commands.Cog):
                         ELSE 3
                     END,
                     c.character_name
-            """, user_id)
+            """, discord_id)
 
-            balance = await conn.fetchval("SELECT bloodcoins FROM users WHERE user_id = $1", user_id)
+            balance = await conn.fetchval("SELECT bloodcoins FROM players WHERE discord_id = $1", discord_id)
 
         if not rows:
-            await ctx.send("📭 Your inventory is empty. Use `mwarp` to get cards!")
+            await ctx.send("📭 Your inventory is empty. Use `wp` to get cards!")
             return
 
         view = InventoryView(rows, balance, user)
