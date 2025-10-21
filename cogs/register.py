@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from utils.db import db_transaction  # helper context manager
+from datetime import datetime
 
 class Register(commands.Cog):
     def __init__(self, bot):
@@ -9,19 +10,22 @@ class Register(commands.Cog):
     @commands.command(name="register")
     async def register(self, ctx):
         """Create a profile and give a random base card + 1000 BloodCoins."""
-        user_id = int(ctx.author.id)
+        discord_id = str(ctx.author.id)
         username = str(ctx.author.display_name)
 
         async with db_transaction(self.bot.db) as conn:
-            exists = await conn.fetchval("SELECT 1 FROM users WHERE user_id = $1", user_id)
+            exists = await conn.fetchval("SELECT 1 FROM players WHERE discord_id = $1", discord_id)
             if exists:
                 await ctx.send(f"⚠️ {ctx.author.display_name}, you already have a profile.")
                 return
 
             await conn.execute("""
-                INSERT INTO users (user_id, username, bloodcoins)
-                VALUES ($1, $2, 1000)
-            """, user_id, username)
+                INSERT INTO players (
+                    discord_id, name, bloodcoins, noblecoins, level, xp, created_at, updated_at
+                ) VALUES (
+                    $1, $2, 1000, 0, 1, 0, $3, $3
+                )
+            """, discord_id, username, datetime.utcnow())
 
             card = await conn.fetchrow("""
                 SELECT id, character_name, form, image_url, description
@@ -32,11 +36,11 @@ class Register(commands.Cog):
             """)
 
             await conn.execute("""
-                INSERT INTO user_cards (user_id, card_id, quantity)
+                INSERT INTO user_cards (discord_id, card_id, quantity)
                 VALUES ($1, $2, 1)
-                ON CONFLICT (user_id, card_id)
+                ON CONFLICT (discord_id, card_id)
                 DO UPDATE SET quantity = user_cards.quantity + 1
-            """, user_id, card["id"])
+            """, discord_id, card["id"])
 
         embed = discord.Embed(
             title="✅ Profile Created!",
