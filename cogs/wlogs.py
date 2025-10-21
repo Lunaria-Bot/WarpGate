@@ -1,5 +1,8 @@
 import discord
 from discord.ext import commands
+import logging
+
+logger = logging.getLogger("wlogs")
 
 class WLogs(commands.Cog):
     def __init__(self, bot):
@@ -7,7 +10,7 @@ class WLogs(commands.Cog):
 
     @commands.command(name="wlogs")
     async def fake_log(self, ctx, *, username: str):
-        print(f'LOGS : "{username}" has draw')
+        logger.info(f'LOGS : "{username}" has draw')
         await ctx.send(f"📝 Logged draw for **{username}**.")
 
 async def setup(bot):
