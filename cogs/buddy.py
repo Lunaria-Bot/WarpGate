@@ -3,6 +3,7 @@ from discord.ext import commands
 from models.card import Card
 from models.user_card import UserCard
 from sqlalchemy.future import select
+from sqlalchemy import update
 from sqlalchemy.orm import selectinload
 
 FORM_COLORS = {
@@ -21,7 +22,7 @@ class Buddy(commands.Cog):
         - mbuddy -> shows the current buddy
         - mbuddy <card name> <form> -> sets this card as buddy
         """
-        user_id = ctx.author.id
+        discord_id = str(ctx.author.id)
 
         async with self.bot.db.begin() as session:
             if not args:
@@ -29,9 +30,15 @@ class Buddy(commands.Cog):
                 result = await session.execute(
                     select(Card, UserCard)
                     .join(UserCard, Card.id == UserCard.card_id)
-                    .join_from(UserCard, "users", isouter=True)
-                    .where(UserCard.user_id == user_id)
-                    .where(Card.id == select(Card.id).where(Card.id == select("buddy_card_id").where("user_id" == user_id)))
+                    .where(UserCard.discord_id == discord_id)
+                    .where(Card.id == select(Card.id)
+                        .where(Card.id == select(UserCard.card_id)
+                            .where(UserCard.discord_id == discord_id)
+                            .where(Card.id == select("buddy_card_id")
+                                .where("discord_id" == discord_id)
+                            )
+                        )
+                    )
                 )
                 row = result.first()
                 if not row:
@@ -64,7 +71,7 @@ class Buddy(commands.Cog):
             result = await session.execute(
                 select(Card, UserCard)
                 .join(UserCard, Card.id == UserCard.card_id)
-                .where(UserCard.user_id == user_id)
+                .where(UserCard.discord_id == discord_id)
                 .where(Card.character_name.ilike(character_name))
                 .where(Card.form == form.lower())
                 .limit(1)
@@ -76,9 +83,11 @@ class Buddy(commands.Cog):
 
             card, uc = row
 
-            # Update buddy
+            # Update buddy_card_id in players table
             await session.execute(
-                f"UPDATE users SET buddy_card_id = {card.id} WHERE user_id = {user_id}"
+                update(UserCard)
+                .where(UserCard.discord_id == discord_id)
+                .values(buddy_card_id=card.id)
             )
 
             level = uc.xp // 100 + 1
