@@ -5,22 +5,22 @@ from utils.leveling import add_xp
 from utils.db import db_transaction  # helper context manager
 
 # --- Helper: update quest progress ---
-async def update_quest_progress(conn, user_id: int, quest_desc: str, amount: int = 1):
+async def update_quest_progress(conn, discord_id: str, quest_desc: str, amount: int = 1):
     await conn.execute("""
         UPDATE user_quests uq
         SET progress = progress + $3,
             completed = (progress + $3) >= qt.target
         FROM quest_templates qt
         WHERE uq.quest_id = qt.quest_id
-          AND uq.user_id = $1
+          AND uq.discord_id = $1
           AND qt.description = $2
           AND uq.claimed = FALSE
-    """, user_id, quest_desc, amount)
+    """, discord_id, quest_desc, amount)
 
 # --- Helper: gain buddy XP ---
-async def gain_buddy_xp(bot, user_id: int, amount: int):
+async def gain_buddy_xp(bot, discord_id: str, amount: int):
     async with db_transaction(bot.db) as conn:
-        buddy_id = await conn.fetchval("SELECT buddy_card_id FROM users WHERE user_id = $1", user_id)
+        buddy_id = await conn.fetchval("SELECT buddy_card_id FROM players WHERE discord_id = $1", discord_id)
         if not buddy_id:
             return
 
@@ -30,8 +30,8 @@ async def gain_buddy_xp(bot, user_id: int, amount: int):
                 health = 100 + ((xp + $1) / 100)::int * 5,
                 attack = 10 + ((xp + $1) / 100)::int * 2,
                 speed = 10 + ((xp + $1) / 100)::int * 1
-            WHERE user_id = $2 AND card_id = $3
-        """, amount, user_id, buddy_id)
+            WHERE discord_id = $2 AND card_id = $3
+        """, amount, discord_id, buddy_id)
 
 class Daily(commands.Cog):
     def __init__(self, bot):
@@ -40,13 +40,13 @@ class Daily(commands.Cog):
 
     @commands.command(name="daily", aliases=["d"])
     async def daily(self, ctx):
-        user_id = int(ctx.author.id)
+        discord_id = str(ctx.author.id)
         now = datetime.datetime.utcnow()
 
         today_midnight = datetime.datetime.combine(now.date(), datetime.time.min)
         tomorrow_midnight = today_midnight + datetime.timedelta(days=1)
 
-        last_claim = self.cooldowns.get(user_id)
+        last_claim = self.cooldowns.get(discord_id)
         if last_claim and last_claim >= today_midnight:
             remaining = (tomorrow_midnight - now).total_seconds()
             hours = int(remaining // 3600)
@@ -59,16 +59,16 @@ class Daily(commands.Cog):
 
         async with db_transaction(self.bot.db) as conn:
             await conn.execute("""
-                UPDATE users SET bloodcoins = bloodcoins + 10000 WHERE user_id = $1
-            """, user_id)
+                UPDATE players SET bloodcoins = bloodcoins + 10000 WHERE discord_id = $1
+            """, discord_id)
 
-            await update_quest_progress(conn, user_id, "Do !daily", 1)
-            await update_quest_progress(conn, user_id, "Do 5 !daily", 1)
+            await update_quest_progress(conn, discord_id, "Do !daily", 1)
+            await update_quest_progress(conn, discord_id, "Do 5 !daily", 1)
 
-        self.cooldowns[user_id] = now
+        self.cooldowns[discord_id] = now
 
-        await gain_buddy_xp(self.bot, user_id, amount=5)
-        leveled_up, new_level = await add_xp(self.bot, user_id, 10)
+        await gain_buddy_xp(self.bot, discord_id, amount=5)
+        leveled_up, new_level = await add_xp(self.bot, discord_id, 10)
 
         embed = discord.Embed(
             title="🎁 Daily Reward",
