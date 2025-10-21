@@ -4,18 +4,22 @@ import datetime
 from utils.leveling import add_xp
 from utils.db import db_transaction  # helper context manager
 
+# --- Helper: resolve internal player ID from discord_id ---
+async def get_user_id(conn, discord_id: str) -> int:
+    return await conn.fetchval("SELECT id FROM players WHERE discord_id = $1", discord_id)
+
 # --- Helper: update quest progress ---
-async def update_quest_progress(conn, discord_id: str, quest_desc: str, amount: int = 1):
+async def update_quest_progress(conn, user_id: int, quest_desc: str, amount: int = 1):
     await conn.execute("""
-        UPDATE user_quests uq
-        SET progress = progress + $3,
-            completed = (progress + $3) >= qt.target
+        UPDATE user_quests
+        SET progress = progress + $1,
+            completed = (progress + $1) >= qt.target
         FROM quest_templates qt
-        WHERE uq.quest_id = qt.quest_id
-          AND uq.discord_id = $1
-          AND qt.description = $2
-          AND uq.claimed = FALSE
-    """, discord_id, quest_desc, amount)
+        WHERE user_quests.quest_id = qt.quest_id
+          AND user_quests.user_id = $2
+          AND qt.description = $3
+          AND user_quests.claimed = FALSE
+    """, amount, user_id, quest_desc)
 
 # --- Helper: gain buddy XP ---
 async def gain_buddy_xp(bot, discord_id: str, amount: int):
@@ -62,8 +66,9 @@ class Daily(commands.Cog):
                 UPDATE players SET bloodcoins = bloodcoins + 10000 WHERE discord_id = $1
             """, discord_id)
 
-            await update_quest_progress(conn, discord_id, "Do !daily", 1)
-            await update_quest_progress(conn, discord_id, "Do 5 !daily", 1)
+            user_id = await get_user_id(conn, discord_id)
+            await update_quest_progress(conn, user_id, "Do !daily", 1)
+            await update_quest_progress(conn, user_id, "Do 5 !daily", 1)
 
         self.cooldowns[discord_id] = now
 
