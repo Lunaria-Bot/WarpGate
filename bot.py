@@ -23,7 +23,8 @@ class MyBot(commands.Bot):
             "cogs.inventory",
             "cogs.warp",
             "cogs.profile",
-            "cogs.admin"
+            "cogs.admin",
+            "cogs.wlogs"
         ]
 
         for ext in extensions:
