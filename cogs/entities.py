@@ -31,22 +31,19 @@ class Stats:
 class Entity:
     def __init__(self, name: str, form: str = "base",
                  image_url: str = None, description: str = None,
-                 override_stats: dict = None):
-        """
-        - name: entity name (card or monster)
-        - form: base, awakened, event
-        - image_url: associated image
-        - description: descriptive text
-        - override_stats: optional dict to override default stats
-        """
+                 override_stats: dict = None, quantity: int = 1, xp: int = 0):
         base = FORM_BASE_STATS.get(form.lower(), FORM_BASE_STATS["base"])
         if override_stats:
             base = {**base, **override_stats}
+
         self.name = name
         self.form = form
         self.stats = Stats(**base)
         self.image_url = image_url
         self.description = description or ""
+        self.quantity = quantity
+        self.xp = xp
+        self.level = self.xp // 100 + 1
 
     def is_alive(self) -> bool:
         return self.stats.health > 0
@@ -63,23 +60,35 @@ class Entity:
             color=FORM_COLORS.get(self.form, discord.Color.dark_gray())
         )
         embed.add_field(name="Form", value=self.form.capitalize(), inline=True)
+        embed.add_field(name="Level", value=f"{self.level} ({self.xp} XP)", inline=True)
+        embed.add_field(name="Quantity", value=str(self.quantity), inline=True)
         embed.add_field(name="Stats", value=str(self.stats), inline=False)
         if self.image_url:
             embed.set_thumbnail(url=self.image_url)
         return embed
 
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "form": self.form,
+            "image_url": self.image_url,
+            "description": self.description,
+            "quantity": self.quantity,
+            "xp": self.xp,
+            "level": self.level,
+            "stats": {
+                "health": self.stats.health,
+                "attack": self.stats.attack,
+                "speed": self.stats.speed
+            }
+        }
+
 # --- Factory to build an Entity from DB rows ---
 def entity_from_db(card_row, user_card_row=None):
-    """
-    Build an Entity from a SQL row.
-    Stat priority:
-    1. user_cards (if defined)
-    2. cards (if defined)
-    3. FORM_BASE_STATS
-    """
     override_stats = {}
+    quantity = 1
+    xp = 0
 
-    # From user_cards
     if user_card_row:
         if user_card_row.get("health") is not None:
             override_stats["health"] = user_card_row["health"]
@@ -87,9 +96,10 @@ def entity_from_db(card_row, user_card_row=None):
             override_stats["attack"] = user_card_row["attack"]
         if user_card_row.get("speed") is not None:
             override_stats["speed"] = user_card_row["speed"]
+        quantity = user_card_row.get("quantity", 1)
+        xp = user_card_row.get("xp", 0)
 
-    # From cards
-    if not override_stats:
+    else:
         if card_row.get("health") is not None:
             override_stats["health"] = card_row["health"]
         if card_row.get("attack") is not None:
@@ -102,5 +112,7 @@ def entity_from_db(card_row, user_card_row=None):
         form=card_row.get("form", "base"),
         image_url=card_row.get("image_url"),
         description=card_row.get("description"),
-        override_stats=override_stats if override_stats else None
+        override_stats=override_stats if override_stats else None,
+        quantity=quantity,
+        xp=xp
     )
