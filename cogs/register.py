@@ -36,6 +36,10 @@ class Register(commands.Cog):
                 LIMIT 1
             """)
 
+            if not card:
+                await ctx.send("⚠️ No base cards available. Please ask staff to add one.")
+                return
+
             await conn.execute("""
                 INSERT INTO user_cards (discord_id, card_id, quantity)
                 VALUES ($1, $2, 1)
