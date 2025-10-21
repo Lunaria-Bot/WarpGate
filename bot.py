@@ -1,9 +1,16 @@
 import asyncio
 import discord
+import logging
 from discord.ext import commands
 from config import settings
 from db import init_db
 from redis_client import init_redis
+
+# --- Logging setup ---
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -30,23 +37,23 @@ class MyBot(commands.Bot):
         for ext in extensions:
             try:
                 await self.load_extension(ext)
-                print(f"🔹 Cog loaded: {ext}")
+                logging.info(f"🔹 Cog loaded: {ext}")
             except Exception as e:
-                print(f"❌ Error loading {ext}: {e}")
+                logging.error(f"❌ Error loading {ext}: {e}")
 
         guild = discord.Object(id=1399784437440319508)
         try:
             synced = await self.tree.sync(guild=guild)
-            print(f"✅ Synced {len(synced)} slash command(s) to guild {guild.id}")
+            logging.info(f"✅ Synced {len(synced)} slash command(s) to guild {guild.id}")
         except Exception as e:
-            print(f"❌ Error syncing commands: {e}")
+            logging.error(f"❌ Error syncing commands: {e}")
 
     async def on_ready(self):
-        print(f"✅ Logged in as {self.user} (ID: {self.user.id})")
-        print("📜 Available prefix commands:")
+        logging.info(f"✅ Logged in as {self.user} (ID: {self.user.id})")
+        logging.info("📜 Available prefix commands:")
         for cmd in self.commands:
-            print(f" - w{cmd.name}")
-        print("Bot is ready!")
+            logging.info(f" - w{cmd.name}")
+        logging.info("Bot is ready!")
 
     async def on_command_error(self, ctx, error):
         if isinstance(error, commands.CommandNotFound):
