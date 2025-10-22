@@ -137,10 +137,11 @@ class Warp(commands.Cog):
                 ORDER BY random()
                 LIMIT 2
             """)
-            if len(rows) < 2:
-                print("⚠️ Warp failed: not enough approved base cards in DB.")
-                await msg.edit(content="⚠️ Not enough approved base cards available.", embed=None)
+            if len(rows) == 0:
+                await msg.edit(content="⚠️ No approved base cards available.", embed=None)
                 return
+            elif len(rows) == 1:
+                rows.append(rows[0])  # fallback: duplicate single card
 
         cards = []
         for row in rows:
@@ -158,6 +159,16 @@ class Warp(commands.Cog):
             title="🌌 Warp Drop",
             description="Choose one card to claim!",
             color=discord.Color.blurple()
+        )
+        embed.add_field(
+            name=f"{FORM_EMOJIS[cards[0].form]} {cards[0].character_name}",
+            value=f"Form: `{cards[0].form}`\nCode: `{cards[0].code}`",
+            inline=True
+        )
+        embed.add_field(
+            name=f"{FORM_EMOJIS[cards[1].form]} {cards[1].character_name}",
+            value=f"Form: `{cards[1].form}`\nCode: `{cards[1].code}`",
+            inline=True
         )
         embed.set_image(url=cards[0].image_url)
         embed.set_thumbnail(url=cards[1].image_url)
