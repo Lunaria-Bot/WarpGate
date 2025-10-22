@@ -4,6 +4,8 @@ from discord.ui import View, Button
 import asyncio
 import random
 import time
+import requests
+from io import BytesIO
 from models.card import Card
 from utils.leveling import add_xp
 from utils.db import db_transaction
@@ -109,15 +111,20 @@ class Warp(commands.Cog):
             card.code = f"{row['character_name'][:12].replace(' ', '')}-{random.randint(1000,9999)}"
             cards.append(card)
 
+        # Download images
+        img1 = BytesIO(requests.get(cards[0].image_url).content)
+        img2 = BytesIO(requests.get(cards[1].image_url).content)
+
+        file1 = discord.File(img1, filename="card1.png")
+        file2 = discord.File(img2, filename="card2.png")
+
         content = (
             f"🃏 {cards[0].character_name} — `{cards[0].code}`\n"
-            f"{cards[0].image_url}\n\n"
-            f"🃏 {cards[1].character_name} — `{cards[1].code}`\n"
-            f"{cards[1].image_url}"
+            f"🃏 {cards[1].character_name} — `{cards[1].code}`"
         )
 
         view = WarpDropView(self.bot, ctx.author, cards[0], cards[1])
-        msg = await ctx.send(content=content, view=view)
+        msg = await ctx.send(content=content, files=[file1, file2], view=view)
         view.message = msg
 
         async def reminder():
