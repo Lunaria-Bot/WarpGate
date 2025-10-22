@@ -54,12 +54,15 @@ class WarpDropView(View):
         discord_id = str(self.user.id)
 
         async with db_transaction(self.bot.db) as conn:
-            await conn.execute("""
-                INSERT INTO cards (character_name, form, image_url, description, created_at, code)
-                VALUES ($1, $2, $3, $4, $5, $6)
-            """, card.character_name, card.form, card.image_url, card.description, card.created_at, card.code)
-
-            card_id = await conn.fetchval("SELECT id FROM cards WHERE code = $1", card.code)
+            existing = await conn.fetchval("SELECT id FROM cards WHERE code = $1", card.code)
+            if not existing:
+                await conn.execute("""
+                    INSERT INTO cards (character_name, form, image_url, description, created_at, code, approved)
+                    VALUES ($1, $2, $3, $4, $5, $6, TRUE)
+                """, card.character_name, card.form, card.image_url, card.description, card.created_at, card.code)
+                card_id = await conn.fetchval("SELECT id FROM cards WHERE code = $1", card.code)
+            else:
+                card_id = existing
 
             await conn.execute("""
                 INSERT INTO user_cards (discord_id, card_id, quantity)
@@ -130,12 +133,13 @@ class Warp(commands.Cog):
             rows = await conn.fetch("""
                 SELECT character_name, form, image_url, description
                 FROM cards
-                WHERE form = 'base'
+                WHERE form = 'base' AND approved = TRUE
                 ORDER BY random()
                 LIMIT 2
             """)
             if len(rows) < 2:
-                await msg.edit(content="⚠️ Not enough cards available.", embed=None)
+                print("⚠️ Warp failed: not enough approved base cards in DB.")
+                await msg.edit(content="⚠️ Not enough approved base cards available.", embed=None)
                 return
 
         cards = []
@@ -147,7 +151,7 @@ class Warp(commands.Cog):
                 description=row["description"],
                 created_at=datetime.utcnow()
             )
-            card.code = card.generate_code()
+            card.code = f"{row['character_name'][:12].replace(' ', '')}-{random.randint(1000,9999)}"
             cards.append(card)
 
         embed = discord.Embed(
