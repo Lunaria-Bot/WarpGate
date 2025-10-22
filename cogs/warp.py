@@ -4,6 +4,9 @@ from discord.ui import View, Button
 import asyncio
 import random
 import time
+import requests
+from io import BytesIO
+from PIL import Image, ImageDraw, ImageFont
 from models.card import Card
 from models.user_card import UserCard
 from utils.leveling import add_xp
@@ -15,6 +18,25 @@ FORM_EMOJIS = {
     "awakened": "✨",
     "event": "🎉"
 }
+
+def generate_warp_image(card1, card2):
+    img1 = Image.open(BytesIO(requests.get(card1.image_url).content)).resize((300, 450))
+    img2 = Image.open(BytesIO(requests.get(card2.image_url).content)).resize((300, 450))
+
+    canvas = Image.new("RGBA", (620, 520), (20, 20, 30, 255))
+    canvas.paste(img1, (10, 40))
+    canvas.paste(img2, (310, 40))
+
+    draw = ImageDraw.Draw(canvas)
+    try:
+        font = ImageFont.truetype("arial.ttf", 20)
+    except:
+        font = ImageFont.load_default()
+
+    draw.text((10, 10), f"{card1.character_name} — {card1.code}", fill="white", font=font)
+    draw.text((310, 10), f"{card2.character_name} — {card2.code}", fill="white", font=font)
+
+    return canvas
 
 class WarpDropView(View):
     def __init__(self, bot, user, card1, card2):
@@ -144,26 +166,22 @@ class Warp(commands.Cog):
             card.code = f"{row['character_name'][:12].replace(' ', '')}-{random.randint(1000,9999)}"
             cards.append(card)
 
+        warp_image = generate_warp_image(cards[0], cards[1])
+        buffer = BytesIO()
+        warp_image.save(buffer, format="PNG")
+        buffer.seek(0)
+        file = discord.File(fp=buffer, filename="warp_drop.png")
+
         embed = discord.Embed(
             title="🌌 Warp Drop",
             description="Choose one card to claim!",
             color=discord.Color.blurple()
         )
-        embed.add_field(
-            name=f"{FORM_EMOJIS[cards[0].form]} {cards[0].character_name} — `{cards[0].code}`",
-            value=f"[Image 1]({cards[0].image_url})",
-            inline=True
-        )
-        embed.add_field(
-            name=f"{FORM_EMOJIS[cards[1].form]} {cards[1].character_name} — `{cards[1].code}`",
-            value=f"[Image 2]({cards[1].image_url})",
-            inline=True
-        )
-        embed.set_image(url=cards[0].image_url)
-        embed.set_thumbnail(url=cards[1].image_url)
+        embed.set_image(url="attachment://warp_drop.png")
 
         view = WarpDropView(self.bot, ctx.author, cards[0], cards[1])
-        view.message = await ctx.send(embed=embed, view=view)
+        msg = await ctx.send(embed=embed, file=file, view=view)
+        view.message = msg
 
         async def reminder():
             await asyncio.sleep(cooldown_seconds)
