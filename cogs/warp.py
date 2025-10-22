@@ -6,10 +6,20 @@ import random
 import time
 import requests
 from io import BytesIO
+from PIL import Image
 from models.card import Card
 from utils.leveling import add_xp
 from utils.db import db_transaction
 from datetime import datetime
+
+def resize_image(url, max_size=(300, 300)):
+    response = requests.get(url)
+    img = Image.open(BytesIO(response.content))
+    img.thumbnail(max_size)
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    buffer.seek(0)
+    return buffer
 
 class WarpDropView(View):
     def __init__(self, bot, user, card1, card2):
@@ -59,11 +69,11 @@ class WarpDropView(View):
 
         await add_xp(self.bot, discord_id, 5)
 
-    @discord.ui.button(label="1️⃣", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="🎴 Claim Card 1", style=discord.ButtonStyle.primary, row=0)
     async def claim_one(self, interaction: discord.Interaction, button: Button):
         await self.interaction_handler(interaction, self.card1)
 
-    @discord.ui.button(label="2️⃣", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="🎴 Claim Card 2", style=discord.ButtonStyle.primary, row=0)
     async def claim_two(self, interaction: discord.Interaction, button: Button):
         await self.interaction_handler(interaction, self.card2)
 
@@ -111,9 +121,9 @@ class Warp(commands.Cog):
             card.code = f"{row['character_name'][:12].replace(' ', '')}-{random.randint(1000,9999)}"
             cards.append(card)
 
-        # Download images
-        img1 = BytesIO(requests.get(cards[0].image_url).content)
-        img2 = BytesIO(requests.get(cards[1].image_url).content)
+        # Resize and prepare images
+        img1 = resize_image(cards[0].image_url)
+        img2 = resize_image(cards[1].image_url)
 
         file1 = discord.File(img1, filename="card1.png")
         file2 = discord.File(img2, filename="card2.png")
