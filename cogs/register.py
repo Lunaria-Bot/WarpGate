@@ -61,5 +61,25 @@ class Register(commands.Cog):
 
         await ctx.send(embed=embed)
 
+    @commands.command(name="sync_tags")
+    @commands.is_owner()
+    async def sync_tags(self, ctx):
+        """Backfill discord_tag for all registered players."""
+        async with db_transaction(self.bot.db) as conn:
+            rows = await conn.fetch("SELECT discord_id FROM players WHERE discord_tag IS NULL")
+
+            updated = 0
+            for row in rows:
+                member = ctx.guild.get_member(int(row["discord_id"]))
+                if member:
+                    discord_tag = f"{member.name}#{member.discriminator}"
+                    await conn.execute(
+                        "UPDATE players SET discord_tag = $1 WHERE discord_id = $2",
+                        discord_tag, row["discord_id"]
+                    )
+                    updated += 1
+
+        await ctx.send(f"✅ Synced {updated} discord tags.")
+
 async def setup(bot):
     await bot.add_cog(Register(bot))
