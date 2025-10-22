@@ -10,16 +10,10 @@ from utils.leveling import add_xp
 from utils.db import db_transaction
 from datetime import datetime
 
-DRAW_ANIM = "https://media.discordapp.net/attachments/1390792811380478032/1428014081927024734/AZnoEBWwS3YhAlSY-j6uUA-AZnoEBWw4TsWJ2XCcPMwOQ.gif"
 FORM_EMOJIS = {
     "base": "🟦",
     "awakened": "✨",
     "event": "🎉"
-}
-FORM_COLORS = {
-    "base": discord.Color.blue(),
-    "awakened": discord.Color.gold(),
-    "event": discord.Color.magenta()
 }
 
 class WarpDropView(View):
@@ -83,12 +77,12 @@ class WarpDropView(View):
         if leveled_up:
             await interaction.followup.send(f"🎉 You leveled up to **Level {new_level}**!", ephemeral=True)
 
-    @discord.ui.button(label="Claim Left", style=discord.ButtonStyle.primary)
-    async def claim_left(self, interaction: discord.Interaction, button: Button):
+    @discord.ui.button(label="1️⃣", style=discord.ButtonStyle.success)
+    async def claim_one(self, interaction: discord.Interaction, button: Button):
         await self.interaction_handler(interaction, self.card1)
 
-    @discord.ui.button(label="Claim Right", style=discord.ButtonStyle.primary)
-    async def claim_right(self, interaction: discord.Interaction, button: Button):
+    @discord.ui.button(label="2️⃣", style=discord.ButtonStyle.success)
+    async def claim_two(self, interaction: discord.Interaction, button: Button):
         await self.interaction_handler(interaction, self.card2)
 
 async def gain_buddy_xp(bot, discord_id: str, amount: int):
@@ -124,11 +118,6 @@ class Warp(commands.Cog):
         ready_at = now + cooldown_seconds
         self.cooldowns[discord_id] = ready_at
 
-        anim_embed = discord.Embed(description="🎴 Warping...", color=discord.Color.blurple())
-        anim_embed.set_image(url=DRAW_ANIM)
-        msg = await ctx.send(embed=anim_embed)
-        await asyncio.sleep(2)
-
         async with db_transaction(self.bot.db) as conn:
             rows = await conn.fetch("""
                 SELECT character_name, form, image_url, description
@@ -138,10 +127,10 @@ class Warp(commands.Cog):
                 LIMIT 2
             """)
             if len(rows) == 0:
-                await msg.edit(content="⚠️ No approved base cards available.", embed=None)
+                await ctx.send("⚠️ No approved base cards available.")
                 return
             elif len(rows) == 1:
-                rows.append(rows[0])  # fallback: duplicate single card
+                rows.append(rows[0])
 
         cards = []
         for row in rows:
@@ -161,21 +150,20 @@ class Warp(commands.Cog):
             color=discord.Color.blurple()
         )
         embed.add_field(
-            name=f"{FORM_EMOJIS[cards[0].form]} {cards[0].character_name}",
-            value=f"Form: `{cards[0].form}`\nCode: `{cards[0].code}`",
+            name=f"{FORM_EMOJIS[cards[0].form]} {cards[0].character_name} — `{cards[0].code}`",
+            value=f"[Image 1]({cards[0].image_url})",
             inline=True
         )
         embed.add_field(
-            name=f"{FORM_EMOJIS[cards[1].form]} {cards[1].character_name}",
-            value=f"Form: `{cards[1].form}`\nCode: `{cards[1].code}`",
+            name=f"{FORM_EMOJIS[cards[1].form]} {cards[1].character_name} — `{cards[1].code}`",
+            value=f"[Image 2]({cards[1].image_url})",
             inline=True
         )
         embed.set_image(url=cards[0].image_url)
         embed.set_thumbnail(url=cards[1].image_url)
 
         view = WarpDropView(self.bot, ctx.author, cards[0], cards[1])
-        view.message = msg
-        await msg.edit(embed=embed, view=view)
+        view.message = await ctx.send(embed=embed, view=view)
 
         async def reminder():
             await asyncio.sleep(cooldown_seconds)
