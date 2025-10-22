@@ -19,9 +19,23 @@ FORM_EMOJIS = {
     "event": "🎉"
 }
 
+def fetch_image(url):
+    response = requests.get(url)
+    content_type = response.headers.get("Content-Type", "")
+    if not content_type.startswith("image"):
+        raise ValueError(f"URL does not return an image: {url}")
+    return Image.open(BytesIO(response.content)).convert("RGBA")
+
 def generate_warp_image(card1, card2):
-    img1 = Image.open(BytesIO(requests.get(card1.image_url).content)).resize((300, 450))
-    img2 = Image.open(BytesIO(requests.get(card2.image_url).content)).resize((300, 450))
+    try:
+        img1 = fetch_image(card1.image_url).resize((300, 450))
+    except Exception:
+        img1 = Image.new("RGBA", (300, 450), (50, 50, 50, 255))
+
+    try:
+        img2 = fetch_image(card2.image_url).resize((300, 450))
+    except Exception:
+        img2 = Image.new("RGBA", (300, 450), (50, 50, 50, 255))
 
     canvas = Image.new("RGBA", (620, 520), (20, 20, 30, 255))
     canvas.paste(img1, (10, 40))
