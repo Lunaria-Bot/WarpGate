@@ -1,53 +1,65 @@
-@commands.command(name="register")
-async def register(self, ctx):
-    """Create a profile and give a random base card + 1000 BloodCoins."""
-    discord_user = ctx.author
-    discord_id = str(discord_user.id)
-    username = str(discord_user.display_name)
-    avatar_url = str(discord_user.display_avatar.url)
-    discord_tag = f"{discord_user.name}#{discord_user.discriminator}"
+import discord
+from discord.ext import commands
+from utils.db import db_transaction
+from datetime import datetime
 
-    async with db_transaction(self.bot.db) as conn:
-        exists = await conn.fetchval("SELECT 1 FROM players WHERE discord_id = $1", discord_id)
-        if exists:
-            await ctx.send(f"⚠️ {username}, you already have a profile.")
-            return
+class Register(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
 
-        await conn.execute("""
-            INSERT INTO players (
-                discord_id, name, discord_tag, bloodcoins, noblecoins, level, xp,
-                created_at, updated_at, avatar_url
-            ) VALUES (
-                $1, $2, $3, 1000, 0, 1, 0, $4, $4, $5
-            )
-        """, discord_id, username, discord_tag, datetime.utcnow(), avatar_url)
+    @commands.command(name="register")
+    async def register(self, ctx):
+        """Create a profile and give a random base card + 1000 BloodCoins."""
+        discord_user = ctx.author
+        discord_id = str(discord_user.id)
+        username = str(discord_user.display_name)
+        avatar_url = str(discord_user.display_avatar.url)
+        discord_tag = f"{discord_user.name}#{discord_user.discriminator}"
 
-        card = await conn.fetchrow("""
-            SELECT id, character_name, form, image_url, description
-            FROM cards
-            WHERE form = 'base'
-            ORDER BY random()
-            LIMIT 1
-        """)
+        async with db_transaction(self.bot.db) as conn:
+            exists = await conn.fetchval("SELECT 1 FROM players WHERE discord_id = $1", discord_id)
+            if exists:
+                await ctx.send(f"⚠️ {username}, you already have a profile.")
+                return
 
-        if not card:
-            await ctx.send("⚠️ No base cards available. Please ask staff to add one.")
-            return
+            await conn.execute("""
+                INSERT INTO players (
+                    discord_id, name, discord_tag, bloodcoins, noblecoins, level, xp,
+                    created_at, updated_at, avatar_url
+                ) VALUES (
+                    $1, $2, $3, 1000, 0, 1, 0, $4, $4, $5
+                )
+            """, discord_id, username, discord_tag, datetime.utcnow(), avatar_url)
 
-        await conn.execute("""
-            INSERT INTO user_cards (discord_id, card_id, quantity)
-            VALUES ($1, $2, 1)
-            ON CONFLICT (discord_id, card_id)
-            DO UPDATE SET quantity = user_cards.quantity + 1
-        """, discord_id, card["id"])
+            card = await conn.fetchrow("""
+                SELECT id, character_name, form, image_url, description
+                FROM cards
+                WHERE form = 'base'
+                ORDER BY random()
+                LIMIT 1
+            """)
 
-    embed = discord.Embed(
-        title="✅ Profile Created!",
-        description=f"A new profile has been created for **{username}**.",
-        color=discord.Color.green()
-    )
-    embed.add_field(name="💰 Starting Balance", value="1,000 BloodCoins", inline=True)
-    embed.add_field(name="🎴 Starter Card", value=f"{card['character_name']} (`{card['form']}`)", inline=True)
-    embed.set_thumbnail(url=card["image_url"] or avatar_url)
+            if not card:
+                await ctx.send("⚠️ No base cards available. Please ask staff to add one.")
+                return
 
-    await ctx.send(embed=embed)
+            await conn.execute("""
+                INSERT INTO user_cards (discord_id, card_id, quantity)
+                VALUES ($1, $2, 1)
+                ON CONFLICT (discord_id, card_id)
+                DO UPDATE SET quantity = user_cards.quantity + 1
+            """, discord_id, card["id"])
+
+        embed = discord.Embed(
+            title="✅ Profile Created!",
+            description=f"A new profile has been created for **{username}**.",
+            color=discord.Color.green()
+        )
+        embed.add_field(name="💰 Starting Balance", value="1,000 BloodCoins", inline=True)
+        embed.add_field(name="🎴 Starter Card", value=f"{card['character_name']} (`{card['form']}`)", inline=True)
+        embed.set_thumbnail(url=card["image_url"] or avatar_url)
+
+        await ctx.send(embed=embed)
+
+async def setup(bot):
+    await bot.add_cog(Register(bot))
