@@ -14,10 +14,10 @@ from datetime import datetime
 
 def resize_image(url, max_size=(300, 300)):
     response = requests.get(url)
-    img = Image.open(BytesIO(response.content))
-    img.thumbnail(max_size)
+    img = Image.open(BytesIO(response.content)).convert("RGBA")
+    img.thumbnail(max_size, Image.LANCZOS)
     buffer = BytesIO()
-    img.save(buffer, format="PNG")
+    img.save(buffer, format="PNG", optimize=True)
     buffer.seek(0)
     return buffer
 
