@@ -15,7 +15,7 @@ FORM_ANIMATIONS = {
     "event": "https://your.cdn.com/animations/event.gif"
 }
 
-class GachaView(discord.ui.View):
+class WarpLakeView(discord.ui.View):
     def __init__(self, author: discord.Member):
         super().__init__(timeout=120)
         self.author = author
@@ -25,7 +25,6 @@ class GachaView(discord.ui.View):
         if interaction.user != self.author:
             await interaction.response.send_message("⚠️ This is not your summon.", ephemeral=True)
             return
-
         await self.handle_summon(interaction, count=1)
 
     @discord.ui.button(label="Multi-Summon 10 Gate Keys", style=discord.ButtonStyle.success)
@@ -33,7 +32,6 @@ class GachaView(discord.ui.View):
         if interaction.user != self.author:
             await interaction.response.send_message("⚠️ This is not your summon.", ephemeral=True)
             return
-
         await self.handle_summon(interaction, count=10)
 
     async def handle_summon(self, interaction: discord.Interaction, count: int):
@@ -59,11 +57,9 @@ class GachaView(discord.ui.View):
                     guaranteed_awakened = True
                 pulls.append(form)
 
-            # Guarantee one awakened if multi-summon
             if count == 10 and not guaranteed_awakened:
                 pulls[random.randint(0, 9)] = "awakened"
 
-            # Deduct keys and update pity
             await conn.execute("""
                 UPDATE players SET gate_keys = gate_keys - $1, pulls = CASE WHEN pulls + $1 >= 50 THEN 0 ELSE pulls + $1 END
                 WHERE discord_id = $2
@@ -88,10 +84,9 @@ class GachaView(discord.ui.View):
                     """, player["id"], card["id"])
                     cards.append((form, card))
 
-        # Build embed
         embed = discord.Embed(
-            title=f"🔮 {self.author.display_name}'s Summon",
-            description=f"✨ You used {count} Gate Key{'s' if count > 1 else ''}!",
+            title=f"🌊 Warp Lake Summon",
+            description=f"✨ {self.author.display_name} used {count} Gate Key{'s' if count > 1 else ''}!",
             color=discord.Color.purple()
         )
         embed.set_thumbnail(url=self.author.display_avatar.url)
@@ -103,7 +98,7 @@ class GachaView(discord.ui.View):
                 inline=False
             )
 
-        embed.set_image(url=FORM_ANIMATIONS.get(cards[-1][0], ""))  # Show animation for last pull
+        embed.set_image(url=FORM_ANIMATIONS.get(cards[-1][0], ""))  # Animation for last pull
         await interaction.response.edit_message(embed=embed, view=self)
 
     def roll_form(self, force_event=False) -> str:
@@ -116,20 +111,20 @@ class GachaView(discord.ui.View):
             return "awakened"
         return "base"
 
-class Gacha(commands.Cog):
+class WarpLake(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="gacha")
+    @commands.command(name="warplake")
     async def summon(self, ctx):
-        view = GachaView(ctx.author)
+        view = WarpLakeView(ctx.author)
         embed = discord.Embed(
-            title="🚪 Warp Gate Summon",
-            description="Use your Gate Keys to summon powerful cards!",
+            title="🌊 Warp Lake Summon",
+            description="Use your Gate Keys to summon powerful cards from the depths.",
             color=discord.Color.blurple()
         )
-        embed.set_image(url="https://media.discordapp.net/attachments/1390792811380478032/1430537585117233225/image.png?ex=68fb74f2&is=68fa2372&hm=02d4e48f3b89547adca693cde29b1f57a7937dae76d78480c49567204111efd7&=&format=webp&quality=lossless&width=1027&height=575")
+        embed.set_image(url="https://media.discordapp.net/attachments/1390792811380478032/1430913699010449570/make_the_water_around_her_gold.jpg?ex=68fb81ba&is=68fa303a&hm=ec317c541e415a4bc01a6d6bb7e8de422b2fe6dbb299139bf09d0835b6e1e776&=&format=webp&width=1027&height=556")
         await ctx.send(embed=embed, view=view)
 
 async def setup(bot):
-    await bot.add_cog(Gacha(bot))
+    await bot.add_cog(WarpLake(bot))
