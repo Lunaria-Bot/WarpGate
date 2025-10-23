@@ -115,7 +115,7 @@ class WarpLake(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="warplake")
+    @commands.command(name="gacha")
     async def summon(self, ctx):
         view = WarpLakeView(ctx.author)
         embed = discord.Embed(
