@@ -120,7 +120,7 @@ class Gacha(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="summon")
+    @commands.command(name="gacha")
     async def summon(self, ctx):
         view = GachaView(ctx.author)
         embed = discord.Embed(
@@ -128,7 +128,7 @@ class Gacha(commands.Cog):
             description="Use your Gate Keys to summon powerful cards!",
             color=discord.Color.blurple()
         )
-        embed.set_image(url="https://your.cdn.com/animations/gate_idle.gif")
+        embed.set_image(url="https://media.discordapp.net/attachments/1390792811380478032/1430537585117233225/image.png?ex=68fb74f2&is=68fa2372&hm=02d4e48f3b89547adca693cde29b1f57a7937dae76d78480c49567204111efd7&=&format=webp&quality=lossless&width=1027&height=575")
         await ctx.send(embed=embed, view=view)
 
 async def setup(bot):
