@@ -1,5 +1,7 @@
 import discord
 from discord.ext import commands
+from typing import Optional
+from utils.db import db_transaction
 
 FORM_EMOJIS = {
     "base": "🟦",
@@ -8,15 +10,15 @@ FORM_EMOJIS = {
 }
 
 class Profile(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     @commands.command(name="profile", aliases=["p"])
-    async def profile(self, ctx, member: discord.Member = None):
+    async def profile(self, ctx: commands.Context, member: Optional[discord.Member] = None):
         user = member or ctx.author
         discord_id = str(user.id)
 
-        async with self.bot.db.acquire() as conn:
+        async with db_transaction(self.bot.db) as conn:
             profile = await conn.fetchrow("""
                 SELECT discord_id, name, bloodcoins, noblecoins, level, xp,
                        created_at, updated_at, achievements, avatar_url
@@ -40,31 +42,37 @@ class Profile(commands.Cog):
                 )
             """, discord_id)
 
+        # 🎨 Embed setup
+        color = discord.Color.gold() if stats and stats["awakened"] else discord.Color.blurple()
         embed = discord.Embed(
             title=f"👤 Profile of {user.display_name}",
-            color=discord.Color.gold() if (stats and stats["awakened"]) else discord.Color.blurple()
+            color=color
         )
         embed.set_thumbnail(url=profile["avatar_url"] or user.display_avatar.url)
 
+        # 💰 Currency
         embed.add_field(name="💰 BloodCoins", value=f"{profile['bloodcoins']:,}", inline=True)
         embed.add_field(name="💎 Noble Coins", value=f"{profile['noblecoins']:,}", inline=True)
 
-        xp = profile["xp"] or 0
+        # 📈 Level & XP
         level = profile["level"] or 1
+        xp = profile["xp"] or 0
         xp_next = 172
-        progress = int((xp / xp_next) * 20) if xp_next else 0
-        bar = "█" * progress + "░" * (20 - progress)
+        progress = int((xp / xp_next) * 20)
+        bar = "▰" * progress + "▱" * (20 - progress)
         embed.add_field(
             name="📈 Level",
-            value=f"Lvl {level} | {xp}/{xp_next} XP\n`{bar}`",
+            value=f"Lvl {level} • {xp}/{xp_next} XP\n`{bar}`",
             inline=False
         )
 
+        # 📅 Dates
         if profile["created_at"]:
             embed.add_field(name="📅 Created", value=profile["created_at"].strftime("%d %b %Y"), inline=True)
         if profile["updated_at"]:
             embed.add_field(name="🔄 Last Update", value=profile["updated_at"].strftime("%d %b %Y"), inline=True)
 
+        # 🃏 Collection
         if stats:
             collection = (
                 f"**Total:** {stats['total'] or 0}\n"
@@ -74,10 +82,11 @@ class Profile(commands.Cog):
             )
             embed.add_field(name="🃏 Collection", value=collection, inline=False)
 
+        # 🎖️ Achievements
         achievements = []
         if stats and stats["awakened"]:
             achievements.append("✨ Awakened Collector")
-        if profile["bloodcoins"] > 100000:
+        if profile["bloodcoins"] > 100_000:
             achievements.append("💎 Wealthy")
         if level >= 10:
             achievements.append("⭐ Level 10+")
@@ -85,5 +94,5 @@ class Profile(commands.Cog):
 
         await ctx.send(embed=embed)
 
-async def setup(bot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(Profile(bot))
