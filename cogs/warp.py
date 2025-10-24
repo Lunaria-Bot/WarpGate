@@ -53,14 +53,20 @@ class WarpDropView(View):
         discord_id = str(self.user.id)
 
         async with db_transaction(self.bot.db) as conn:
-            await conn.execute("""
-                INSERT INTO user_cards (discord_id, card_id, quantity)
-                VALUES ($1, $2, 1)
-                ON CONFLICT (discord_id, card_id)
-                DO UPDATE SET quantity = user_cards.quantity + 1
-            """, discord_id, card.id)
+            # Get internal user_id from players table
+            player_id = await conn.fetchval("SELECT id FROM players WHERE discord_id = $1", discord_id)
+            if not player_id:
+                await interaction.followup.send("⚠️ You don't have a profile yet. Use `wregister`.", ephemeral=True)
+                return
 
-            await conn.execute("UPDATE players SET bloodcoins = bloodcoins + 10 WHERE discord_id = $1", discord_id)
+            await conn.execute("""
+                INSERT INTO user_cards (user_id, card_id, quantity)
+                VALUES ($1, $2, 1)
+                ON CONFLICT (user_id, card_id)
+                DO UPDATE SET quantity = user_cards.quantity + 1
+            """, player_id, card.id)
+
+            await conn.execute("UPDATE players SET bloodcoins = bloodcoins + 10 WHERE id = $1", player_id)
 
         await interaction.followup.send(
             f"✅ You claimed **{card.character_name}**!\nForm: `{card.form}`\nCode: `{card.code}`",
