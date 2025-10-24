@@ -97,9 +97,11 @@ class InventoryView(discord.ui.View):
 
         self.update_card_select()
 
-    def show_filters(self, interaction: discord.Interaction):
+    async def show_filters(self, interaction: discord.Interaction):
         if interaction.user != self.author:
-            return interaction.response.send_message("⚠️ This is not your inventory.", ephemeral=True)
+            await interaction.response.send_message("⚠️ This is not your inventory.", ephemeral=True)
+            return
+
         self.clear_items()
         self.filter_mode = True
 
@@ -110,14 +112,15 @@ class InventoryView(discord.ui.View):
         back_button.callback = self.back_to_main
         self.add_item(back_button)
 
-        return interaction.response.edit_message(embed=self.format_page(), view=self)
+        await interaction.response.edit_message(embed=self.format_page(), view=self)
 
-    def back_to_main(self, interaction: discord.Interaction):
+    async def back_to_main(self, interaction: discord.Interaction):
         if interaction.user != self.author:
-            return interaction.response.send_message("⚠️ This is not your inventory.", ephemeral=True)
+            await interaction.response.send_message("⚠️ This is not your inventory.", ephemeral=True)
+            return
         self.filter_mode = False
         self.setup_main_view()
-        return interaction.response.edit_message(embed=self.format_page(), view=self)
+        await interaction.response.edit_message(embed=self.format_page(), view=self)
 
     def get_filtered_cards(self) -> list[dict]:
         filtered = [c for c in self.cards if self.current_form == "all" or c["form"] == self.current_form]
@@ -198,23 +201,23 @@ class InventoryView(discord.ui.View):
         )
         embed.set_thumbnail(url=self.author.display_avatar.url)
 
-        if not chunk:
-    embed.add_field(name="Empty", value="📭 No cards to display.", inline=False)
-    return embed
+              if not chunk:
+            embed.add_field(name="Empty", value="📭 No cards to display.", inline=False)
+            return embed
 
-for c in chunk:
-    entity = entity_from_db(c, {
-        "health": c.get("u_health"),
-        "attack": c.get("u_attack"),
-        "speed": c.get("u_speed")
-    })
-    level = get_level(c.get("xp", 0))
-    embed.add_field(
-        name=f"{FORM_EMOJIS.get(c['form'], '')} {c['character_name']} ({c['form'].capitalize()})",
-        value=f"Lvl {level} • Qty: **{c['quantity']}**\n{format_stats(entity)}",
-        inline=False
-    )
-return embed
+        for c in chunk:
+            entity = entity_from_db(c, {
+                "health": c.get("u_health"),
+                "attack": c.get("u_attack"),
+                "speed": c.get("u_speed")
+            })
+            level = get_level(c.get("xp", 0))
+            embed.add_field(
+                name=f"{FORM_EMOJIS.get(c['form'], '')} {c['character_name']} ({c['form'].capitalize()})",
+                value=f"Lvl {level} • Qty: **{c['quantity']}**\n{format_stats(entity)}",
+                inline=False
+            )
+        return embed
 
     async def change_page(self, interaction: discord.Interaction, delta: int):
         if interaction.user != self.author:
