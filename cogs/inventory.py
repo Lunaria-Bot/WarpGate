@@ -82,9 +82,19 @@ class InventoryView(discord.ui.View):
 
     def setup_main_view(self):
         self.clear_items()
-        self.add_item(discord.ui.Button(label="Filter", style=discord.ButtonStyle.primary, custom_id="filter", callback=self.show_filters))
-        self.add_item(discord.ui.Button(label="⬅️ Prev", style=discord.ButtonStyle.secondary, custom_id="prev", callback=lambda i: self.change_page(i, -1)))
-        self.add_item(discord.ui.Button(label="Next ➡️", style=discord.ButtonStyle.secondary, custom_id="next", callback=lambda i: self.change_page(i, +1)))
+
+        filter_button = discord.ui.Button(label="Filter", style=discord.ButtonStyle.primary)
+        filter_button.callback = self.show_filters
+        self.add_item(filter_button)
+
+        prev_button = discord.ui.Button(label="⬅️ Prev", style=discord.ButtonStyle.secondary)
+        prev_button.callback = lambda i: self.change_page(i, -1)
+        self.add_item(prev_button)
+
+        next_button = discord.ui.Button(label="Next ➡️", style=discord.ButtonStyle.secondary)
+        next_button.callback = lambda i: self.change_page(i, +1)
+        self.add_item(next_button)
+
         self.update_card_select()
 
     def show_filters(self, interaction: discord.Interaction):
@@ -92,9 +102,14 @@ class InventoryView(discord.ui.View):
             return interaction.response.send_message("⚠️ This is not your inventory.", ephemeral=True)
         self.clear_items()
         self.filter_mode = True
+
         self.add_item(FormSelect(self))
         self.add_item(SortSelect(self))
-        self.add_item(discord.ui.Button(label="↩️ Back", style=discord.ButtonStyle.danger, custom_id="back", callback=self.back_to_main))
+
+        back_button = discord.ui.Button(label="↩️ Back", style=discord.ButtonStyle.danger)
+        back_button.callback = self.back_to_main
+        self.add_item(back_button)
+
         return interaction.response.edit_message(embed=self.format_page(), view=self)
 
     def back_to_main(self, interaction: discord.Interaction):
@@ -187,7 +202,7 @@ class InventoryView(discord.ui.View):
             embed.add_field(name="Empty", value="📭 No cards to display.", inline=False)
             return embed
 
-        for c in chunk:
+                for c in chunk:
             entity = entity_from_db(c, {
                 "health": c.get("u_health"),
                 "attack": c.get("u_attack"),
