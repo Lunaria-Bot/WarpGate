@@ -18,7 +18,10 @@ intents.members = True
 
 class MyBot(commands.Bot):
     def __init__(self):
-        super().__init__(command_prefix="w", intents=intents)
+        def get_prefix(bot, message):
+            return ["w", "W"]
+
+        super().__init__(command_prefix=get_prefix, intents=intents)
 
     async def setup_hook(self):
         self.db = await init_db()
