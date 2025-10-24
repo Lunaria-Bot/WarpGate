@@ -199,22 +199,22 @@ class InventoryView(discord.ui.View):
         embed.set_thumbnail(url=self.author.display_avatar.url)
 
         if not chunk:
-            embed.add_field(name="Empty", value="📭 No cards to display.", inline=False)
-            return embed
+    embed.add_field(name="Empty", value="📭 No cards to display.", inline=False)
+    return embed
 
-            for c in chunk:
-            entity = entity_from_db(c, {
-                "health": c.get("u_health"),
-                "attack": c.get("u_attack"),
-                "speed": c.get("u_speed")
-            })
-            level = get_level(c.get("xp", 0))
-            embed.add_field(
-                name=f"{FORM_EMOJIS.get(c['form'], '')} {c['character_name']} ({c['form'].capitalize()})",
-                value=f"Lvl {level} • Qty: **{c['quantity']}**\n{format_stats(entity)}",
-                inline=False
-            )
-        return embed
+for c in chunk:
+    entity = entity_from_db(c, {
+        "health": c.get("u_health"),
+        "attack": c.get("u_attack"),
+        "speed": c.get("u_speed")
+    })
+    level = get_level(c.get("xp", 0))
+    embed.add_field(
+        name=f"{FORM_EMOJIS.get(c['form'], '')} {c['character_name']} ({c['form'].capitalize()})",
+        value=f"Lvl {level} • Qty: **{c['quantity']}**\n{format_stats(entity)}",
+        inline=False
+    )
+return embed
 
     async def change_page(self, interaction: discord.Interaction, delta: int):
         if interaction.user != self.author:
