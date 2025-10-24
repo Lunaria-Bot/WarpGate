@@ -220,4 +220,12 @@ class Inventory(commands.Cog):
             balance = await conn.fetchval("SELECT bloodcoins FROM players WHERE discord_id = $1", discord_id)
 
         if not rows:
-            await ctx.send("
+            await ctx.send("📭 Your inventory is empty. Use `ww` to get cards!")
+            return
+
+            view = InventoryView(rows, balance, user)
+            message = await ctx.send(embed=view.format_page(), view=view)
+            view.message = message
+
+        async def setup(bot: commands.Bot):
+        await bot.add_cog(Inventory(bot))
