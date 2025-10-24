@@ -189,44 +189,35 @@ class Inventory(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-@commands.command(name="inventory", aliases=["inv"])
-async def inventory(self, ctx, member: Optional[discord.Member] = None):
-    user = member or ctx.author
-    discord_id = str(user.id)
+    @commands.command(name="inventory", aliases=["inv"])
+    async def inventory(self, ctx, member: Optional[discord.Member] = None):
+        user = member or ctx.author
+        discord_id = str(user.id)
 
-    async with db_transaction(self.bot.db) as conn:
-        player_id = await conn.fetchval("SELECT id FROM players WHERE discord_id = $1", discord_id)
-        if not player_id:
-            await ctx.send("⚠️ You don't have a profile yet. Use `wregister` to create one.")
-            return
+        async with db_transaction(self.bot.db) as conn:
+            player_id = await conn.fetchval("SELECT id FROM players WHERE discord_id = $1", discord_id)
+            if not player_id:
+                await ctx.send("⚠️ You don't have a profile yet. Use `wregister` to create one.")
+                return
 
-        rows = await conn.fetch("""
-            SELECT
-                c.id AS card_id, c.character_name, c.form, c.image_url, c.description,
-                uc.quantity, uc.xp,
-                uc.health AS u_health, uc.attack AS u_attack, uc.speed AS u_speed
-            FROM user_cards uc
-            JOIN cards c ON c.id = uc.card_id
-            WHERE uc.user_id = $1
-            ORDER BY 
-                CASE c.form
-                    WHEN 'awakened' THEN 1
-                    WHEN 'event' THEN 2
-                    ELSE 3
-                END,
-                c.character_name
-        """, player_id)
+            rows = await conn.fetch("""
+                SELECT
+                    c.id AS card_id, c.character_name, c.form, c.image_url, c.description,
+                    uc.quantity, uc.xp,
+                    uc.health AS u_health, uc.attack AS u_attack, uc.speed AS u_speed
+                FROM user_cards uc
+                JOIN cards c ON c.id = uc.card_id
+                WHERE uc.user_id = $1
+                ORDER BY 
+                    CASE c.form
+                        WHEN 'awakened' THEN 1
+                        WHEN 'event' THEN 2
+                        ELSE 3
+                    END,
+                    c.character_name
+            """, player_id)
 
-        balance = await conn.fetchval("SELECT bloodcoins FROM players WHERE discord_id = $1", discord_id)
+            balance = await conn.fetchval("SELECT bloodcoins FROM players WHERE discord_id = $1", discord_id)
 
-    if not rows:
-        await ctx.send("📭 Your inventory is empty. Use `ww` to get cards!")
-        return
-
-    view = InventoryView(rows, balance, user)
-    message = await ctx.send(embed=view.format_page(), view=view)
-    view.message = message
-
-
-async def setup(bot: commands.Bot):
-    await bot.add_cog(Inventory(bot))
+        if not rows:
+            await ctx.send("
