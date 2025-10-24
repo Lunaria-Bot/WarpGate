@@ -202,7 +202,7 @@ class InventoryView(discord.ui.View):
             embed.add_field(name="Empty", value="📭 No cards to display.", inline=False)
             return embed
 
-                for c in chunk:
+            for c in chunk:
             entity = entity_from_db(c, {
                 "health": c.get("u_health"),
                 "attack": c.get("u_attack"),
