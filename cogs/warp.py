@@ -38,7 +38,9 @@ class WarpDropView(View):
         for item in self.children:
             item.disabled = True
         if self.message:
-            await self.message.edit(view=self)
+            await self.message.edit(view=None)
+            if not self.claimed:
+                await self.message.channel.send("😢 Oh no, you let them ran away !")
 
     async def interaction_handler(self, interaction: discord.Interaction, card):
         if self.claimed:
@@ -48,12 +50,11 @@ class WarpDropView(View):
         self.claimed = True
         for item in self.children:
             item.disabled = True
-        await interaction.response.edit_message(view=self)
+        await interaction.response.edit_message(view=None)
 
         discord_id = str(self.user.id)
 
         async with db_transaction(self.bot.db) as conn:
-            # Get internal user_id from players table
             player_id = await conn.fetchval("SELECT id FROM players WHERE discord_id = $1", discord_id)
             if not player_id:
                 await interaction.followup.send("⚠️ You don't have a profile yet. Use `wregister`.", ephemeral=True)
@@ -69,17 +70,18 @@ class WarpDropView(View):
             await conn.execute("UPDATE players SET bloodcoins = bloodcoins + 10 WHERE id = $1", player_id)
 
         await interaction.followup.send(
-            f"✅ You claimed **{card.character_name}**!\nForm: `{card.form}`\nCode: `{card.code}`",
+            f"✅ You claimed **{card.character_name}**!\nForm: `{card.form}`",
             ephemeral=True
         )
 
+        await interaction.channel.send(f"🎉 You just claimed **{card.character_name}**!")
         await add_xp(self.bot, discord_id, 5)
 
-    @discord.ui.button(label="🎴 Claim Card 1", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Claim 1", style=discord.ButtonStyle.primary, row=0)
     async def claim_one(self, interaction: discord.Interaction, button: Button):
         await self.interaction_handler(interaction, self.card1)
 
-    @discord.ui.button(label="🎴 Claim Card 2", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Claim 2", style=discord.ButtonStyle.primary, row=0)
     async def claim_two(self, interaction: discord.Interaction, button: Button):
         await self.interaction_handler(interaction, self.card2)
 
@@ -135,8 +137,8 @@ class Warp(commands.Cog):
         file2 = discord.File(img2, filename="card2.png")
 
         content = (
-            f"🃏 {cards[0].character_name} — `{cards[0].code}`\n"
-            f"🃏 {cards[1].character_name} — `{cards[1].code}`"
+            f"🃏 {cards[0].character_name}\n"
+            f"🃏 {cards[1].character_name}"
         )
 
         view = WarpDropView(self.bot, ctx.author, cards[0], cards[1])
