@@ -201,7 +201,7 @@ class InventoryView(discord.ui.View):
         )
         embed.set_thumbnail(url=self.author.display_avatar.url)
 
-              if not chunk:
+        if not chunk:
             embed.add_field(name="Empty", value="📭 No cards to display.", inline=False)
             return embed
 
