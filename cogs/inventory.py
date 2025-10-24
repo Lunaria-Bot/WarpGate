@@ -223,9 +223,9 @@ class Inventory(commands.Cog):
             await ctx.send("📭 Your inventory is empty. Use `ww` to get cards!")
             return
 
-            view = InventoryView(rows, balance, user)
-            message = await ctx.send(embed=view.format_page(), view=view)
-            view.message = message
+        view = InventoryView(rows, balance, user)
+        message = await ctx.send(embed=view.format_page(), view=view)
+        view.message = message
 
-        async def setup(bot: commands.Bot):
-        await bot.add_cog(Inventory(bot))
+async def setup(bot: commands.Bot):
+    await bot.add_cog(Inventory(bot))
