@@ -22,6 +22,7 @@ class Register(commands.Cog):
                 await ctx.send(f"⚠️ {username}, you already have a profile.")
                 return
 
+            # Create player profile
             await conn.execute("""
                 INSERT INTO players (
                     discord_id, name, discord_tag, bloodcoins, noblecoins, level, xp,
@@ -31,6 +32,10 @@ class Register(commands.Cog):
                 )
             """, discord_id, username, discord_tag, datetime.utcnow(), avatar_url)
 
+            # Get internal user_id
+            player_id = await conn.fetchval("SELECT id FROM players WHERE discord_id = $1", discord_id)
+
+            # Get random starter card
             card = await conn.fetchrow("""
                 SELECT id, character_name, form, image_url, description
                 FROM cards
@@ -43,12 +48,13 @@ class Register(commands.Cog):
                 await ctx.send("⚠️ No base cards available. Please ask staff to add one.")
                 return
 
+            # Assign starter card
             await conn.execute("""
-                INSERT INTO user_cards (discord_id, card_id, quantity)
+                INSERT INTO user_cards (user_id, card_id, quantity)
                 VALUES ($1, $2, 1)
-                ON CONFLICT (discord_id, card_id)
+                ON CONFLICT (user_id, card_id)
                 DO UPDATE SET quantity = user_cards.quantity + 1
-            """, discord_id, card["id"])
+            """, player_id, card["id"])
 
         embed = discord.Embed(
             title="✅ Profile Created!",
