@@ -189,7 +189,7 @@ class Inventory(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @commands.command(name="inventory", aliases=["inv"])
+@commands.command(name="inventory", aliases=["inv"])
 async def inventory(self, ctx, member: Optional[discord.Member] = None):
     user = member or ctx.author
     discord_id = str(user.id)
