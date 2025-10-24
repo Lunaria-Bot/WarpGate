@@ -36,8 +36,9 @@ class Profile(commands.Cog):
                     COUNT(*) FILTER (WHERE c.form = 'base') AS base,
                     COUNT(*) FILTER (WHERE c.form = 'awakened') AS awakened,
                     COUNT(*) FILTER (WHERE c.form = 'event') AS event
-                FROM cards c
-                WHERE c.owner_id = (
+                FROM user_cards uc
+                JOIN cards c ON c.id = uc.card_id
+                WHERE uc.user_id = (
                     SELECT id FROM players WHERE discord_id = $1
                 )
             """, discord_id)
