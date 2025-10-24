@@ -72,27 +72,37 @@ class InventoryView(discord.ui.View):
         self.author = author
         self.current_form = "all"
         self.sort_mode = "name"
-        self.compact_mode = False
         self.page = 0
         self.per_page = 10
         self.message: Optional[discord.Message] = None
+        self.card_select: Optional[discord.ui.Select] = None
+        self.filter_mode = False
 
+        self.setup_main_view()
+
+    def setup_main_view(self):
+        self.clear_items()
+        self.add_item(discord.ui.Button(label="Filter", style=discord.ButtonStyle.primary, custom_id="filter", callback=self.show_filters))
+        self.add_item(discord.ui.Button(label="⬅️ Prev", style=discord.ButtonStyle.secondary, custom_id="prev", callback=lambda i: self.change_page(i, -1)))
+        self.add_item(discord.ui.Button(label="Next ➡️", style=discord.ButtonStyle.secondary, custom_id="next", callback=lambda i: self.change_page(i, +1)))
+        self.update_card_select()
+
+    def show_filters(self, interaction: discord.Interaction):
+        if interaction.user != self.author:
+            return interaction.response.send_message("⚠️ This is not your inventory.", ephemeral=True)
+        self.clear_items()
+        self.filter_mode = True
         self.add_item(FormSelect(self))
         self.add_item(SortSelect(self))
+        self.add_item(discord.ui.Button(label="↩️ Back", style=discord.ButtonStyle.danger, custom_id="back", callback=self.back_to_main))
+        return interaction.response.edit_message(embed=self.format_page(), view=self)
 
-        toggle_button = discord.ui.Button(label="🗂️ Toggle View", style=discord.ButtonStyle.secondary)
-        toggle_button.callback = self.toggle_view
-        self.add_item(toggle_button)
-
-        prev_button = discord.ui.Button(label="⬅️ Prev", style=discord.ButtonStyle.secondary)
-        next_button = discord.ui.Button(label="Next ➡️", style=discord.ButtonStyle.secondary)
-        prev_button.callback = lambda i: self.change_page(i, -1)
-        next_button.callback = lambda i: self.change_page(i, +1)
-        self.add_item(prev_button)
-        self.add_item(next_button)
-
-        self.card_select: Optional[discord.ui.Select] = None
-        self.update_card_select()
+    def back_to_main(self, interaction: discord.Interaction):
+        if interaction.user != self.author:
+            return interaction.response.send_message("⚠️ This is not your inventory.", ephemeral=True)
+        self.filter_mode = False
+        self.setup_main_view()
+        return interaction.response.edit_message(embed=self.format_page(), view=self)
 
     def get_filtered_cards(self) -> list[dict]:
         filtered = [c for c in self.cards if self.current_form == "all" or c["form"] == self.current_form]
@@ -173,7 +183,7 @@ class InventoryView(discord.ui.View):
         )
         embed.set_thumbnail(url=self.author.display_avatar.url)
 
-        if not chunk:
+                if not chunk:
             embed.add_field(name="Empty", value="📭 No cards to display.", inline=False)
             return embed
 
@@ -184,18 +194,11 @@ class InventoryView(discord.ui.View):
                 "speed": c.get("u_speed")
             })
             level = get_level(c.get("xp", 0))
-            if self.compact_mode:
-                embed.add_field(
-                    name=f"{FORM_EMOJIS.get(c['form'], '')} {c['character_name']}",
-                    value=f"Qty: **{c['quantity']}**",
-                    inline=True
-                )
-            else:
-                embed.add_field(
-                    name=f"{FORM_EMOJIS.get(c['form'], '')} {c['character_name']} ({c['form'].capitalize()})",
-                    value=f"Lvl {level} • Qty: **{c['quantity']}**\n{format_stats(entity)}",
-                    inline=False
-                )
+            embed.add_field(
+                name=f"{FORM_EMOJIS.get(c['form'], '')} {c['character_name']} ({c['form'].capitalize()})",
+                value=f"Lvl {level} • Qty: **{c['quantity']}**\n{format_stats(entity)}",
+                inline=False
+            )
         return embed
 
     async def change_page(self, interaction: discord.Interaction, delta: int):
@@ -209,13 +212,6 @@ class InventoryView(discord.ui.View):
             self.page = new_page
             self.update_card_select()
             await interaction.response.edit_message(embed=self.format_page(), view=self)
-
-    async def toggle_view(self, interaction: discord.Interaction):
-        if interaction.user != self.author:
-            await interaction.response.send_message("⚠️ This is not your inventory.", ephemeral=True)
-            return
-        self.compact_mode = not self.compact_mode
-        await interaction.response.edit_message(embed=self.format_page(), view=self)
 
     async def on_timeout(self):
         for child in self.children:
