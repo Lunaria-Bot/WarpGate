@@ -25,19 +25,16 @@ def render_card_image(card, max_size=(300, 300)):
 
         draw = ImageDraw.Draw(img)
 
-        # Police
         try:
             font = ImageFont.truetype("arial.ttf", 22)
         except:
             font = ImageFont.load_default()
 
-        # Texte du code
         code_text = f"#{card.code}"
         text_width, text_height = draw.textsize(code_text, font=font)
         x = (img.width - text_width) // 2
-        y = 12  # Position haute (là où "ICI" était)
+        y = 12
 
-        # Ombre + glow
         draw.text((x+1, y+1), code_text, font=font, fill=(0, 0, 0, 180))
         draw.text((x, y), code_text, font=font, fill=(255, 255, 255, 255))
 
@@ -164,13 +161,22 @@ class Warp(commands.Cog):
         file1 = discord.File(img1, filename="card1.png")
         file2 = discord.File(img2, filename="card2.png")
 
-        content = (
-            f"🃏 {cards[0].character_name}\n"
-            f"🃏 {cards[1].character_name}"
+        embed1 = discord.Embed(
+            title=cards[0].character_name,
+            description=f"Form: `{cards[0].form}`\nCode: `{cards[0].code}`",
+            color=discord.Color.blurple()
         )
+        embed1.set_image(url="attachment://card1.png")
+
+        embed2 = discord.Embed(
+            title=cards[1].character_name,
+            description=f"Form: `{cards[1].form}`\nCode: `{cards[1].code}`",
+            color=discord.Color.blurple()
+        )
+        embed2.set_image(url="attachment://card2.png")
 
         view = WarpDropView(self.bot, ctx.author, cards[0], cards[1])
-        msg = await ctx.send(content=content, files=[file1, file2], view=view)
+        msg = await ctx.send(embeds=[embed1, embed2], files=[file1, file2], view=view)
         view.message = msg
 
         async def reminder():
