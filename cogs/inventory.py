@@ -220,7 +220,7 @@ class InventoryView(discord.ui.View):
                 inline=False
             )
         return embed
-    class Inventory(commands.Cog):
+  class Inventory(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
