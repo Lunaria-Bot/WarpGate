@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-from typing import Optional
+from typing import Optional, List, Dict
 from .entities import entity_from_db
 from utils.db import db_transaction
 
@@ -65,7 +65,7 @@ class SortSelect(discord.ui.Select):
         await interaction.response.edit_message(embed=self.parent_view.format_page(), view=self.parent_view)
 
 class InventoryView(discord.ui.View):
-    def __init__(self, cards: list[dict], balance: int, author: discord.Member):
+    def __init__(self, cards: List[Dict], balance: int, author: discord.Member):
         super().__init__(timeout=120)
         self.cards = cards
         self.balance = balance
@@ -122,7 +122,7 @@ class InventoryView(discord.ui.View):
         self.setup_main_view()
         await interaction.response.edit_message(embed=self.format_page(), view=self)
 
-    def get_filtered_cards(self) -> list[dict]:
+    def get_filtered_cards(self) -> List[Dict]:
         filtered = [c for c in self.cards if self.current_form == "all" or c["form"] == self.current_form]
         if self.sort_mode == "level":
             return sorted(filtered, key=lambda c: get_level(c.get("xp", 0)), reverse=True)
@@ -168,12 +168,13 @@ class InventoryView(discord.ui.View):
             "speed": card.get("u_speed")
         })
         level = get_level(card.get("xp", 0))
+        form = card.get("form") or "base"
         embed = discord.Embed(
-            title=f"{FORM_EMOJIS.get(card['form'], '')} {card['character_name']}",
+            title=f"{FORM_EMOJIS.get(form, '')} {card['character_name']}",
             description=card["description"] or "No description available.",
-            color=FORM_COLORS.get(card["form"], discord.Color.dark_gray())
+            color=FORM_COLORS.get(form, discord.Color.dark_gray())
         )
-        embed.add_field(name="Form", value=card["form"].capitalize(), inline=True)
+        embed.add_field(name="Form", value=form.capitalize(), inline=True)
         embed.add_field(name="Level", value=f"{level} ({card.get('xp', 0)} XP)", inline=True)
         embed.add_field(name="Quantity", value=str(card["quantity"]), inline=True)
         embed.add_field(name="Stats", value=format_stats(entity), inline=False)
@@ -186,9 +187,9 @@ class InventoryView(discord.ui.View):
         start, end = self.page * self.per_page, (self.page + 1) * self.per_page
         chunk = filtered[start:end]
 
-        total = len(self.cards)
-        awakened = sum(1 for c in self.cards if c["form"] == "awakened")
-        event = sum(1 for c in self.cards if c["form"] == "event")
+        total = len(filtered)
+        awakened = sum(1 for c in filtered if c["form"] == "awakened")
+        event = sum(1 for c in filtered if c["form"] == "event")
 
         embed = discord.Embed(
             title=f"🎴 {self.author.display_name}'s Inventory",
@@ -212,32 +213,14 @@ class InventoryView(discord.ui.View):
                 "speed": c.get("u_speed")
             })
             level = get_level(c.get("xp", 0))
+            form = c.get("form") or "base"
             embed.add_field(
-                name=f"{FORM_EMOJIS.get(c['form'], '')} {c['character_name']} ({c['form'].capitalize()})",
+                name=f"{FORM_EMOJIS.get(form, '')} {c['character_name']} ({form.capitalize()})",
                 value=f"Lvl {level} • Qty: **{c['quantity']}**\n{format_stats(entity)}",
                 inline=False
             )
         return embed
-
-    async def change_page(self, interaction: discord.Interaction, delta: int):
-        if interaction.user != self.author:
-            await interaction.response.send_message("⚠️ This is not your inventory.", ephemeral=True)
-            return
-        filtered = self.get_filtered_cards()
-        max_page = (len(filtered) - 1) // self.per_page
-        new_page = self.page + delta
-        if 0 <= new_page <= max_page:
-            self.page = new_page
-            self.update_card_select()
-            await interaction.response.edit_message(embed=self.format_page(), view=self)
-
-    async def on_timeout(self):
-        for child in self.children:
-            child.disabled = True
-        if self.message:
-            await self.message.edit(view=self)
-
-class Inventory(commands.Cog):
+        class Inventory(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
