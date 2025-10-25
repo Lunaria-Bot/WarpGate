@@ -6,47 +6,36 @@ import random
 import time
 import requests
 from io import BytesIO
-from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
+from PIL import Image, ImageDraw, ImageFont
 from models.card import Card
 from utils.leveling import add_xp
 from utils.db import db_transaction
 from datetime import datetime
 
-def render_card_image(card, max_size=(300, 300)):
+def render_combined_image(card1, card2, size=(300, 300)):
     try:
-        response = requests.get(card.image_url, timeout=5)
-        response.raise_for_status()
+        img1 = Image.open(BytesIO(requests.get(card1.image_url, timeout=5).content)).convert("RGBA")
+        img2 = Image.open(BytesIO(requests.get(card2.image_url, timeout=5).content)).convert("RGBA")
 
-        if "image" not in response.headers.get("Content-Type", ""):
-            raise ValueError("URL does not point to an image.")
+        img1.thumbnail(size, Image.LANCZOS)
+        img2.thumbnail(size, Image.LANCZOS)
 
-        img = Image.open(BytesIO(response.content)).convert("RGBA")
-        img.thumbnail(max_size, Image.LANCZOS)
+        combined = Image.new("RGBA", (size[0]*2, size[1]), (0, 0, 0, 0))
+        combined.paste(img1, (0, 0))
+        combined.paste(img2, (size[0], 0))
 
-        draw = ImageDraw.Draw(img)
-
-        try:
-            font = ImageFont.truetype("arial.ttf", 22)
-        except:
-            font = ImageFont.load_default()
-
-        code_text = f"#{card.code}"
-
-        # ✅ Position fixe dans la zone “CODE” (ajuste ici si besoin)
-        x = 24  # horizontal offset
-        y = 28  # vertical offset
-
-        draw.text((x+1, y+1), code_text, font=font, fill=(0, 0, 0, 180))  # shadow
-        draw.text((x, y), code_text, font=font, fill=(255, 255, 255, 255))  # main text
+        buffer = BytesIO()
+        combined.save(buffer, format="PNG", optimize=True)
+        buffer.seek(0)
+        return buffer
 
     except Exception as e:
-        print(f"❌ Failed to render card image: {e}")
-        img = Image.new("RGBA", max_size, (30, 30, 30, 255))
-
-    buffer = BytesIO()
-    img.save(buffer, format="PNG", optimize=True)
-    buffer.seek(0)
-    return buffer
+        print(f"❌ Failed to render combined image: {e}")
+        fallback = Image.new("RGBA", (size[0]*2, size[1]), (30, 30, 30, 255))
+        buffer = BytesIO()
+        fallback.save(buffer, format="PNG")
+        buffer.seek(0)
+        return buffer
 
 class WarpDropView(View):
     def __init__(self, bot, user, card1, card2):
@@ -132,7 +121,7 @@ class Warp(commands.Cog):
 
         async with db_transaction(self.bot.db) as conn:
             rows = await conn.fetch("""
-                SELECT id, character_name, form, image_url
+                SELECT id, character_name, form, image_url, series
                 FROM cards
                 WHERE form = 'base' AND approved = TRUE
                 ORDER BY random()
@@ -151,33 +140,25 @@ class Warp(commands.Cog):
                 character_name=row["character_name"],
                 form=row["form"],
                 image_url=row["image_url"],
+                series=row["series"],
                 created_at=datetime.utcnow()
             )
-            card.code = f"{row['character_name'][:12].replace(' ', '').upper()}-{random.randint(1000,9999)}"
             cards.append(card)
 
-        img1 = render_card_image(cards[0])
-        img2 = render_card_image(cards[1])
+        combined = render_combined_image(cards[0], cards[1])
+        file = discord.File(combined, filename="drop.png")
 
-        file1 = discord.File(img1, filename="card1.png")
-        file2 = discord.File(img2, filename="card2.png")
+        lines = [
+            f":one: **{cards[0].character_name}** — *{cards[0].series or 'Unknown'}*",
+            f":two: **{cards[1].character_name}** — *{cards[1].series or 'Unknown'}*"
+        ]
+        intro = "Here are the warped cards:\n" + "\n".join(lines)
 
-        embed1 = discord.Embed(
-            title=cards[0].character_name,
-            description=f"Form: `{cards[0].form}`\nCode: `{cards[0].code}`",
-            color=discord.Color.blurple()
-        )
-        embed1.set_image(url="attachment://card1.png")
-
-        embed2 = discord.Embed(
-            title=cards[1].character_name,
-            description=f"Form: `{cards[1].form}`\nCode: `{cards[1].code}`",
-            color=discord.Color.blurple()
-        )
-        embed2.set_image(url="attachment://card2.png")
+        embed = discord.Embed(title="Warp Drop", description=intro, color=discord.Color.blurple())
+        embed.set_image(url="attachment://drop.png")
 
         view = WarpDropView(self.bot, ctx.author, cards[0], cards[1])
-        msg = await ctx.send(embeds=[embed1, embed2], files=[file1, file2], view=view)
+        msg = await ctx.send(embed=embed, file=file, view=view)
         view.message = msg
 
         async def reminder():
