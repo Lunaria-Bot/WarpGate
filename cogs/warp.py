@@ -6,16 +6,26 @@ import random
 import time
 import requests
 from io import BytesIO
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from models.card import Card
 from utils.leveling import add_xp
 from utils.db import db_transaction
 from datetime import datetime
 
 def resize_image(url, max_size=(300, 300)):
-    response = requests.get(url)
-    img = Image.open(BytesIO(response.content)).convert("RGBA")
-    img.thumbnail(max_size, Image.LANCZOS)
+    try:
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+
+        if "image" not in response.headers.get("Content-Type", ""):
+            raise ValueError("URL does not point to an image.")
+
+        img = Image.open(BytesIO(response.content)).convert("RGBA")
+        img.thumbnail(max_size, Image.LANCZOS)
+    except Exception as e:
+        print(f"❌ Failed to load image from {url}: {e}")
+        img = Image.new("RGBA", max_size, (30, 30, 30, 255))
+
     buffer = BytesIO()
     img.save(buffer, format="PNG", optimize=True)
     buffer.seek(0)
@@ -40,7 +50,7 @@ class WarpDropView(View):
         if self.message:
             await self.message.edit(view=None)
             if not self.claimed:
-                await self.message.channel.send("😢 Oh no, you let them ran away !")
+                await self.message.channel.send("😢 Oh no, you let them ran away!")
 
     async def interaction_handler(self, interaction: discord.Interaction, card):
         if self.claimed:
@@ -52,7 +62,7 @@ class WarpDropView(View):
             item.disabled = True
         await interaction.response.edit_message(view=None)
 
-        discord_id = str(self.user.id)
+        discord_id = int(self.user.id)
 
         async with db_transaction(self.bot.db) as conn:
             player_id = await conn.fetchval("SELECT id FROM players WHERE discord_id = $1", discord_id)
@@ -74,7 +84,7 @@ class WarpDropView(View):
             ephemeral=True
         )
 
-        await interaction.channel.send(f"🎉 You just claimed **{card.character_name}**!")
+        await interaction.channel.send(f"🎉 {interaction.user.mention} just claimed **{card.character_name}**!")
         await add_xp(self.bot, discord_id, 5)
 
     @discord.ui.button(label="Claim 1", style=discord.ButtonStyle.primary, row=0)
@@ -129,7 +139,6 @@ class Warp(commands.Cog):
             card.code = f"{row['character_name'][:12].replace(' ', '')}-{random.randint(1000,9999)}"
             cards.append(card)
 
-        # Resize and prepare images
         img1 = resize_image(cards[0].image_url)
         img2 = resize_image(cards[1].image_url)
 
