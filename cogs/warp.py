@@ -31,14 +31,13 @@ def render_card_image(card, max_size=(300, 300)):
             font = ImageFont.load_default()
 
         code_text = f"#{card.code}"
-        bbox = draw.textbbox((0, 0), code_text, font=font)
-        text_width = bbox[2] - bbox[0]
-        text_height = bbox[3] - bbox[1]
-        x = (img.width - text_width) // 2
-        y = 12
 
-        draw.text((x+1, y+1), code_text, font=font, fill=(0, 0, 0, 180))
-        draw.text((x, y), code_text, font=font, fill=(255, 255, 255, 255))
+        # ✅ Position fixe dans la zone “CODE” (ajuste ici si besoin)
+        x = 24  # horizontal offset
+        y = 28  # vertical offset
+
+        draw.text((x+1, y+1), code_text, font=font, fill=(0, 0, 0, 180))  # shadow
+        draw.text((x, y), code_text, font=font, fill=(255, 255, 255, 255))  # main text
 
     except Exception as e:
         print(f"❌ Failed to render card image: {e}")
