@@ -12,20 +12,20 @@ from utils.leveling import add_xp
 from utils.db import db_transaction
 from datetime import datetime
 
-def render_combined_image(card1, card2, size=(300, 300), spacing=24):
+def render_combined_image(card1, card2, max_size=(300, 300), spacing=24):
     try:
         img1 = Image.open(BytesIO(requests.get(card1.image_url, timeout=5).content)).convert("RGBA")
         img2 = Image.open(BytesIO(requests.get(card2.image_url, timeout=5).content)).convert("RGBA")
 
-        img1 = img1.resize(size, Image.LANCZOS)
-        img2 = img2.resize(size, Image.LANCZOS)
+        img1.thumbnail(max_size, Image.LANCZOS)
+        img2.thumbnail(max_size, Image.LANCZOS)
 
-        total_width = size[0] * 2 + spacing
-        height = size[1]
+        height = max(img1.height, img2.height)
+        total_width = img1.width + img2.width + spacing
 
         combined = Image.new("RGBA", (total_width, height), (0, 0, 0, 0))
         combined.paste(img1, (0, 0))
-        combined.paste(img2, (size[0] + spacing, 0))
+        combined.paste(img2, (img1.width + spacing, 0))
 
         buffer = BytesIO()
         combined.save(buffer, format="PNG", optimize=True)
@@ -34,7 +34,7 @@ def render_combined_image(card1, card2, size=(300, 300), spacing=24):
 
     except Exception as e:
         print(f"❌ Failed to render combined image: {e}")
-        fallback = Image.new("RGBA", (size[0]*2 + spacing, size[1]), (30, 30, 30, 255))
+        fallback = Image.new("RGBA", (max_size[0]*2 + spacing, max_size[1]), (30, 30, 30, 255))
         buffer = BytesIO()
         fallback.save(buffer, format="PNG")
         buffer.seek(0)
