@@ -6,7 +6,7 @@ import random
 import time
 import requests
 from io import BytesIO
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 from models.card import Card
 from utils.leveling import add_xp
 from utils.db import db_transaction
@@ -154,11 +154,8 @@ class Warp(commands.Cog):
         ]
         intro = "Here are the warped cards:\n" + "\n".join(lines)
 
-        embed = discord.Embed(title="Warp Drop", description=intro, color=discord.Color.blurple())
-        embed.set_image(url="attachment://drop.png")
-
         view = WarpDropView(self.bot, ctx.author, cards[0], cards[1])
-        msg = await ctx.send(embed=embed, file=file, view=view)
+        msg = await ctx.send(content=intro, file=file, view=view)
         view.message = msg
 
         async def reminder():
