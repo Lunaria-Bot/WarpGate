@@ -71,7 +71,7 @@ class WarpDropView(View):
             item.disabled = True
         await interaction.response.edit_message(view=None)
 
-        discord_id = int(self.user.id)
+        discord_id = str(self.user.id)
 
         async with db_transaction(self.bot.db) as conn:
             player_id = await conn.fetchval("SELECT id FROM players WHERE discord_id = $1", discord_id)
