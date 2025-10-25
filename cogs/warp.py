@@ -31,7 +31,9 @@ def render_card_image(card, max_size=(300, 300)):
             font = ImageFont.load_default()
 
         code_text = f"#{card.code}"
-        text_width, text_height = draw.textsize(code_text, font=font)
+        bbox = draw.textbbox((0, 0), code_text, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
         x = (img.width - text_width) // 2
         y = 12
 
