@@ -15,6 +15,7 @@ FORM_COLORS = {
     "event": discord.Color.magenta()
 }
 
+
 def format_stats(entity) -> str:
     return (
         f"❤️ `{entity.stats.health}`  "
@@ -22,8 +23,10 @@ def format_stats(entity) -> str:
         f"💨 `{entity.stats.speed}`"
     )
 
+
 def get_level(xp: int) -> int:
     return xp // 100 + 1
+
 
 class FormSelect(discord.ui.Select):
     def __init__(self, parent_view: "InventoryView"):
@@ -45,6 +48,7 @@ class FormSelect(discord.ui.Select):
         self.parent_view.update_card_select()
         await interaction.response.edit_message(embed=self.parent_view.format_page(), view=self.parent_view)
 
+
 class SortSelect(discord.ui.Select):
     def __init__(self, parent_view: "InventoryView"):
         options = [
@@ -63,6 +67,7 @@ class SortSelect(discord.ui.Select):
         self.parent_view.page = 0
         self.parent_view.update_card_select()
         await interaction.response.edit_message(embed=self.parent_view.format_page(), view=self.parent_view)
+
 
 class InventoryView(discord.ui.View):
     def __init__(self, cards: List[Dict], balance: int, author: discord.Member):
@@ -83,15 +88,18 @@ class InventoryView(discord.ui.View):
     def setup_main_view(self):
         self.clear_items()
 
-        filter_button = discord.ui.Button(label="Filter", style=discord.ButtonStyle.primary)
+        filter_button = discord.ui.Button(
+            label="Filter", style=discord.ButtonStyle.primary)
         filter_button.callback = self.show_filters
         self.add_item(filter_button)
 
-        prev_button = discord.ui.Button(label="⬅️ Prev", style=discord.ButtonStyle.secondary)
+        prev_button = discord.ui.Button(
+            label="⬅️ Prev", style=discord.ButtonStyle.secondary)
         prev_button.callback = lambda i: self.change_page(i, -1)
         self.add_item(prev_button)
 
-        next_button = discord.ui.Button(label="Next ➡️", style=discord.ButtonStyle.secondary)
+        next_button = discord.ui.Button(
+            label="Next ➡️", style=discord.ButtonStyle.secondary)
         next_button.callback = lambda i: self.change_page(i, +1)
         self.add_item(next_button)
 
@@ -108,7 +116,8 @@ class InventoryView(discord.ui.View):
         self.add_item(FormSelect(self))
         self.add_item(SortSelect(self))
 
-        back_button = discord.ui.Button(label="↩️ Back", style=discord.ButtonStyle.danger)
+        back_button = discord.ui.Button(
+            label="↩️ Back", style=discord.ButtonStyle.danger)
         back_button.callback = self.back_to_main
         self.add_item(back_button)
 
@@ -123,7 +132,8 @@ class InventoryView(discord.ui.View):
         await interaction.response.edit_message(embed=self.format_page(), view=self)
 
     def get_filtered_cards(self) -> List[Dict]:
-        filtered = [c for c in self.cards if self.current_form == "all" or c["form"] == self.current_form]
+        filtered = [c for c in self.cards if self.current_form ==
+            "all" or c["form"] == self.current_form]
         if self.sort_mode == "level":
             return sorted(filtered, key=lambda c: get_level(c.get("xp", 0)), reverse=True)
         elif self.sort_mode == "quantity":
@@ -148,8 +158,10 @@ class InventoryView(discord.ui.View):
             level = get_level(c.get("xp", 0))
             label = f"{c['character_name']} ({c['form'].capitalize()})"
             desc = f"Lvl {level} • Qty: {c['quantity']} • {format_stats(entity)}"
-            options.append(discord.SelectOption(label=label, description=desc, value=str(c["card_id"])))
-        self.card_select = discord.ui.Select(placeholder="Select a card…", options=options)
+            options.append(discord.SelectOption(
+                label=label, description=desc, value=str(c["card_id"])))
+        self.card_select = discord.ui.Select(
+            placeholder="Select a card…", options=options)
         self.card_select.callback = self.inspect_card
         self.add_item(self.card_select)
 
@@ -175,8 +187,10 @@ class InventoryView(discord.ui.View):
             color=FORM_COLORS.get(form, discord.Color.dark_gray())
         )
         embed.add_field(name="Form", value=form.capitalize(), inline=True)
-        embed.add_field(name="Level", value=f"{level} ({card.get('xp', 0)} XP)", inline=True)
-        embed.add_field(name="Quantity", value=str(card["quantity"]), inline=True)
+        embed.add_field(
+            name="Level", value=f"{level} ({card.get('xp', 0)} XP)", inline=True)
+        embed.add_field(name="Quantity", value=str(
+            card["quantity"]), inline=True)
         embed.add_field(name="Stats", value=format_stats(entity), inline=False)
         if card["image_url"]:
             embed.set_image(url=card["image_url"])
@@ -203,7 +217,8 @@ class InventoryView(discord.ui.View):
         embed.set_thumbnail(url=self.author.display_avatar.url)
 
         if not chunk:
-            embed.add_field(name="Empty", value="📭 No cards to display.", inline=False)
+            embed.add_field(
+                name="Empty", value="📭 No cards to display.", inline=False)
             return embed
 
         for c in chunk:
@@ -220,9 +235,9 @@ class InventoryView(discord.ui.View):
                 inline=False
             )
         return embed
-  class Inventory(commands.Cog):
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
+    class Inventory(commands.Cog):
+        def __init__(self, bot: commands.Bot):
+         self.bot = bot
 
     @commands.command(name="inventory", aliases=["inv"])
     async def inventory(self, ctx, member: Optional[discord.Member] = None):
