@@ -256,7 +256,7 @@ class Inventory(commands.Cog):
 
             rows = await conn.fetch("""
                 SELECT
-                    c.id AS card_id, c.character_name, c.form, c.image_url, c.description,
+                    c.id AS card_id, c.character_name, c.form, c.image_url, c.series,
                     uc.quantity, uc.xp,
                     uc.health AS u_health, uc.attack AS u_attack, uc.speed AS u_speed
                 FROM user_cards uc
