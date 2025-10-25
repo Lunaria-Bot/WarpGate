@@ -171,7 +171,7 @@ class InventoryView(discord.ui.View):
         form = card.get("form") or "base"
         embed = discord.Embed(
             title=f"{FORM_EMOJIS.get(form, '')} {card['character_name']}",
-            description=card["description"] or "No description available.",
+            description = f"Series: {card.get('series', 'Unknown')}",
             color=FORM_COLORS.get(form, discord.Color.dark_gray())
         )
         embed.add_field(name="Form", value=form.capitalize(), inline=True)
