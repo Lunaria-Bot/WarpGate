@@ -6,15 +6,15 @@ import random
 import time
 import requests
 from io import BytesIO
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
 from models.card import Card
 from utils.leveling import add_xp
 from utils.db import db_transaction
 from datetime import datetime
 
-def resize_image(url, max_size=(300, 300)):
+def render_card_image(card, max_size=(300, 300)):
     try:
-        response = requests.get(url, timeout=5)
+        response = requests.get(card.image_url, timeout=5)
         response.raise_for_status()
 
         if "image" not in response.headers.get("Content-Type", ""):
@@ -22,8 +22,27 @@ def resize_image(url, max_size=(300, 300)):
 
         img = Image.open(BytesIO(response.content)).convert("RGBA")
         img.thumbnail(max_size, Image.LANCZOS)
+
+        draw = ImageDraw.Draw(img)
+
+        # Police
+        try:
+            font = ImageFont.truetype("arial.ttf", 22)
+        except:
+            font = ImageFont.load_default()
+
+        # Texte du code
+        code_text = f"#{card.code}"
+        text_width, text_height = draw.textsize(code_text, font=font)
+        x = (img.width - text_width) // 2
+        y = 12  # Position haute (là où "ICI" était)
+
+        # Ombre + glow
+        draw.text((x+1, y+1), code_text, font=font, fill=(0, 0, 0, 180))
+        draw.text((x, y), code_text, font=font, fill=(255, 255, 255, 255))
+
     except Exception as e:
-        print(f"❌ Failed to load image from {url}: {e}")
+        print(f"❌ Failed to render card image: {e}")
         img = Image.new("RGBA", max_size, (30, 30, 30, 255))
 
     buffer = BytesIO()
@@ -136,11 +155,11 @@ class Warp(commands.Cog):
                 image_url=row["image_url"],
                 created_at=datetime.utcnow()
             )
-            card.code = f"{row['character_name'][:12].replace(' ', '')}-{random.randint(1000,9999)}"
+            card.code = f"{row['character_name'][:12].replace(' ', '').upper()}-{random.randint(1000,9999)}"
             cards.append(card)
 
-        img1 = resize_image(cards[0].image_url)
-        img2 = resize_image(cards[1].image_url)
+        img1 = render_card_image(cards[0])
+        img2 = render_card_image(cards[1])
 
         file1 = discord.File(img1, filename="card1.png")
         file2 = discord.File(img2, filename="card2.png")
