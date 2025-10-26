@@ -11,6 +11,11 @@ from models.card import Card
 from utils.leveling import add_xp
 from utils.db import db_transaction
 from datetime import datetime
+import string
+
+def generate_card_code(length=4) -> str:
+    charset = string.ascii_lowercase + string.digits
+    return ''.join(random.choices(charset, k=length))
 
 def render_combined_image(card1, card2, max_size=(300, 300), spacing=24):
     try:
@@ -72,6 +77,7 @@ class WarpDropView(View):
         await interaction.response.edit_message(view=None)
 
         discord_id = str(self.user.id)
+        card_code = generate_card_code()
 
         async with db_transaction(self.bot.db) as conn:
             player_id = await conn.fetchval("SELECT id FROM players WHERE discord_id = $1", discord_id)
@@ -89,7 +95,7 @@ class WarpDropView(View):
             await conn.execute("UPDATE players SET bloodcoins = bloodcoins + 10 WHERE id = $1", player_id)
 
         await interaction.followup.send(
-            f"✅ You claimed **{card.character_name}**!\nForm: `{card.form}`",
+            f"✅ You claimed **{card.character_name}**!\nForm: `{card.form}`\nCode: `{card_code}`",
             ephemeral=True
         )
 
