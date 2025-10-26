@@ -37,7 +37,7 @@ class Register(commands.Cog):
 
             # Get random starter card
             card = await conn.fetchrow("""
-                SELECT id, character_name, form, image_url, description
+                SELECT id, character_name, form, image_url, series
                 FROM cards
                 WHERE form = 'base'
                 ORDER BY random()
@@ -63,6 +63,7 @@ class Register(commands.Cog):
         )
         embed.add_field(name="💰 Starting Balance", value="1,000 BloodCoins", inline=True)
         embed.add_field(name="🎴 Starter Card", value=f"{card['character_name']} (`{card['form']}`)", inline=True)
+        embed.add_field(name="📚 Series", value=card.get("series", "Unknown"), inline=True)
         embed.set_thumbnail(url=card["image_url"] or avatar_url)
 
         await ctx.send(embed=embed)
