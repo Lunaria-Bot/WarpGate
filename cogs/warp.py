@@ -187,4 +187,3 @@ class Warp(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(Warp(bot))
-w
