@@ -54,7 +54,7 @@ class Team(commands.Cog):
 
         await ctx.send(f"✅ Team updated. {len(card_ids)} card(s) assigned. Captain: `{card_ids[0]}`")
 
-    @commands.command(name="wteam")
+    @commands.command(name="team")
     async def show_team(self, ctx, member: Optional[discord.Member] = None):
         """Display your current team lineup."""
         user = member or ctx.author
