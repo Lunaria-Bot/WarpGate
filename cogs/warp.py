@@ -76,7 +76,7 @@ class WarpDropView(View):
             item.disabled = True
         await interaction.response.edit_message(view=None)
 
-        discord_id = str(self.user.id)
+        discord_id = interaction.user.id  # ✅ keep as int
         card_code = generate_card_code()
 
         async with db_transaction(self.bot.db) as conn:
@@ -117,7 +117,7 @@ class Warp(commands.Cog):
 
     @commands.command(name="warp", aliases=["w"])
     async def warp(self, ctx):
-        discord_id = str(ctx.author.id)
+        discord_id = ctx.author.id  # ✅ keep as int
         now = int(time.time())
 
         if discord_id in self.cooldowns and self.cooldowns[discord_id] > now:
@@ -175,7 +175,7 @@ class Warp(commands.Cog):
 
     @commands.command(name="cooldown", aliases=["cd"])
     async def cooldown(self, ctx):
-        discord_id = str(ctx.author.id)
+        discord_id = ctx.author.id  # ✅ keep as int
         now = int(time.time())
         tomorrow_midnight = (now // 86400 + 1) * 86400
         warp_ready = self.cooldowns.get(discord_id, now)
