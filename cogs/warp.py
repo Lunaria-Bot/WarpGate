@@ -86,11 +86,11 @@ class WarpDropView(View):
                 return
 
             await conn.execute("""
-                INSERT INTO user_cards (user_id, card_id, quantity)
-                VALUES ($1, $2, 1)
+                INSERT INTO user_cards (user_id, card_id, quantity, code)
+                VALUES ($1, $2, 1, $3)
                 ON CONFLICT (user_id, card_id)
                 DO UPDATE SET quantity = user_cards.quantity + 1
-            """, player_id, card.id)
+            """, player_id, card.id, card_code)
 
             await conn.execute("UPDATE players SET bloodcoins = bloodcoins + 10 WHERE id = $1", player_id)
 
