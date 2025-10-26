@@ -6,7 +6,7 @@ class Team(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="wsetteam")
+    @commands.command(name="teamset")
     async def set_team(self, ctx, *codes: str):
         if not codes:
             return await ctx.send("❌ Tu dois fournir au moins un code de carte (ex: `GojoSatoru-base`).")
@@ -47,7 +47,7 @@ class Team(commands.Cog):
 
         await ctx.send(f"✅ Ton équipe a été mise à jour avec {len(card_ids)} carte(s).")
 
-    @commands.command(name="wteam")
+    @commands.command(name="team")
     async def show_team(self, ctx):
         discord_id = ctx.author.id
 
