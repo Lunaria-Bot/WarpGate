@@ -36,7 +36,8 @@ class MyBot(commands.Bot):
             "cogs.admin",
             "cogs.wlogs",
             "cogs.gacha",
-            "cogs.devlog"
+            "cogs.devlog",
+            "cogs.team"
         ]
 
         for ext in extensions:
