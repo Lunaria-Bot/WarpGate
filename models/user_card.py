@@ -12,3 +12,7 @@ class UserCard(Base):
     card_id = Column(Integer, ForeignKey("cards.id"), nullable=False)
 
     card = relationship("Card")
+
+    def get_code(self):
+        """Returns the code of the linked card."""
+        return self.card.code if self.card else None
