@@ -1,10 +1,16 @@
 import uuid
+import random
+import string
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, Text, DateTime, Enum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
+
+def generate_short_code(length=4) -> str:
+    charset = string.ascii_lowercase + string.digits
+    return ''.join(random.choices(charset, k=length))
 
 class Card(Base):
     __tablename__ = "cards"
@@ -21,6 +27,5 @@ class Card(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     def generate_code(self):
-        timestamp = int(self.created_at.timestamp())
-        short = str(self.uuid).split("-")[0].upper()
-        return f"{self.id}-{short}-{timestamp}"
+        """Generates a short randomized code like '7vst'."""
+        return generate_short_code()
