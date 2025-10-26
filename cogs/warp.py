@@ -59,11 +59,11 @@ class WarpDropView(View):
         if self.message:
             await self.message.edit(view=None)
             if not self.claimed:
-                await self.message.channel.send("😢 Oh non, tu les as laissés s’échapper !")
+                await self.message.channel.send("😢 Oh no, you let them escape!")
 
     async def interaction_handler(self, interaction: discord.Interaction, card):
         if self.claimed:
-            await interaction.response.send_message("❌ Tu as déjà réclamé une carte.", ephemeral=True)
+            await interaction.response.send_message("❌ You already claimed a card.", ephemeral=True)
             return
 
         self.claimed = True
@@ -71,13 +71,13 @@ class WarpDropView(View):
             item.disabled = True
         await interaction.response.edit_message(view=None)
 
-        discord_id = interaction.user.id
-        card_code = card.code  # ✅ défini dans la table cards
+        discord_id = str(interaction.user.id)
+        card_code = card.code
 
         async with db_transaction(self.bot.db) as conn:
             player_id = await conn.fetchval("SELECT id FROM players WHERE discord_id = $1", discord_id)
             if not player_id:
-                await interaction.followup.send("⚠️ Tu n’as pas encore de profil. Utilise `wregister`.", ephemeral=True)
+                await interaction.followup.send("⚠️ You don't have a profile yet. Use `wregister`.", ephemeral=True)
                 return
 
             await conn.execute("""
@@ -90,18 +90,18 @@ class WarpDropView(View):
             await conn.execute("UPDATE players SET bloodcoins = bloodcoins + 10 WHERE id = $1", player_id)
 
         await interaction.followup.send(
-            f"✅ Tu as réclamé **{card.character_name}** !\nForme : `{card.form}`\nCode : `{card_code}`",
+            f"✅ You claimed **{card.character_name}**!\nForm: `{card.form}`\nCode: `{card_code}`",
             ephemeral=True
         )
 
-        await interaction.channel.send(f"🎉 {interaction.user.mention} vient de réclamer **{card.character_name}** !")
-        await add_xp(self.bot, discord_id, 5)
+        await interaction.channel.send(f"🎉 {interaction.user.mention} just claimed **{card.character_name}**!")
+        await add_xp(self.bot, interaction.user.id, 5)
 
-    @discord.ui.button(label="Réclamer 1", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Claim 1", style=discord.ButtonStyle.primary, row=0)
     async def claim_one(self, interaction: discord.Interaction, button: Button):
         await self.interaction_handler(interaction, self.card1)
 
-    @discord.ui.button(label="Réclamer 2", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Claim 2", style=discord.ButtonStyle.primary, row=0)
     async def claim_two(self, interaction: discord.Interaction, button: Button):
         await self.interaction_handler(interaction, self.card2)
 
@@ -112,12 +112,12 @@ class Warp(commands.Cog):
 
     @commands.command(name="warp", aliases=["w"])
     async def warp(self, ctx):
-        discord_id = ctx.author.id
+        discord_id = str(ctx.author.id)
         now = int(time.time())
 
         if discord_id in self.cooldowns and self.cooldowns[discord_id] > now:
             ready_at = self.cooldowns[discord_id]
-            return await ctx.send(f"⏳ Le portail est scellé... <t:{ready_at}:R>")
+            return await ctx.send(f"⏳ The portal is sealed... <t:{ready_at}:R>")
 
         cooldown_seconds = 600
         ready_at = now + cooldown_seconds
@@ -132,7 +132,7 @@ class Warp(commands.Cog):
                 LIMIT 2
             """)
             if len(rows) == 0:
-                await ctx.send("⚠️ Aucune carte de base approuvée disponible.")
+                await ctx.send("⚠️ No approved base cards available.")
                 return
             elif len(rows) == 1:
                 rows.append(rows[0])
@@ -154,10 +154,10 @@ class Warp(commands.Cog):
         file = discord.File(combined, filename="drop.png")
 
         lines = [
-            f":one: **{cards[0].character_name}** — *{cards[0].series or 'Inconnue'}*",
-            f":two: **{cards[1].character_name}** — *{cards[1].series or 'Inconnue'}*"
+            f":one: **{cards[0].character_name}** — *{cards[0].series or 'Unknown'}*",
+            f":two: **{cards[1].character_name}** — *{cards[1].series or 'Unknown'}*"
         ]
-        intro = "Voici les cartes distordues :\n" + "\n".join(lines)
+        intro = "Here are the warped cards:\n" + "\n".join(lines)
 
         view = WarpDropView(self.bot, ctx.author, cards[0], cards[1])
         msg = await ctx.send(content=intro, file=file, view=view)
@@ -165,19 +165,19 @@ class Warp(commands.Cog):
 
         async def reminder():
             await asyncio.sleep(cooldown_seconds)
-            await ctx.send(f"🔔 {ctx.author.mention} **Warp** est à nouveau disponible !")
+            await ctx.send(f"🔔 {ctx.author.mention} **Warp** is available again!")
 
         self.bot.loop.create_task(reminder())
 
     @commands.command(name="cooldown", aliases=["cd"])
     async def cooldown(self, ctx):
-        discord_id = ctx.author.id
+        discord_id = str(ctx.author.id)
         now = int(time.time())
         tomorrow_midnight = (now // 86400 + 1) * 86400
         warp_ready = self.cooldowns.get(discord_id, now)
 
-        embed = discord.Embed(title="⏳ Temps de recharge", color=discord.Color.blurple())
-        embed.add_field(name="Quotidien", value=f"<t:{tomorrow_midnight}:R>", inline=False)
+        embed = discord.Embed(title="⏳ Cooldowns", color=discord.Color.blurple())
+        embed.add_field(name="Daily", value=f"<t:{tomorrow_midnight}:R>", inline=False)
         embed.add_field(name="Warp", value=f"<t:{warp_ready}:R>", inline=False)
         await ctx.send(embed=embed)
 
