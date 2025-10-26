@@ -16,11 +16,11 @@ class Team(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="wsetteam")
-    async def set_team(self, ctx, *card_ids: int):
-        """Assign up to 5 cards to your team. First one becomes captain."""
-        if not card_ids or len(card_ids) > 5:
-            await ctx.send("⚠️ You must provide between 1 and 5 card IDs.")
+    @commands.command(name="teamset")
+    async def set_team(self, ctx, *card_codes: str):
+        """Assign up to 5 cards to your team using card codes. First one becomes captain."""
+        if not card_codes or len(card_codes) > 5:
+            await ctx.send("⚠️ You must provide between 1 and 5 card codes.")
             return
 
         discord_id = str(ctx.author.id)
@@ -31,10 +31,23 @@ class Team(commands.Cog):
                 await ctx.send("⚠️ You don't have a profile yet. Use `wregister` to create one.")
                 return
 
+            # Resolve codes to card IDs
+            rows = await conn.fetch(
+                "SELECT id, code FROM cards WHERE code = ANY($1::text[])",
+                list(card_codes)
+            )
+            code_to_id = {row["code"]: row["id"] for row in rows}
+            missing = [code for code in card_codes if code not in code_to_id]
+            if missing:
+                await ctx.send(f"❌ Invalid card code(s): {', '.join(missing)}")
+                return
+
+            card_ids = [code_to_id[code] for code in card_codes]
+
             # Validate ownership
             owned_ids = await conn.fetch(
                 "SELECT card_id FROM user_cards WHERE user_id = $1 AND card_id = ANY($2::int[])",
-                player_id, list(card_ids)
+                player_id, card_ids
             )
             owned_set = {row["card_id"] for row in owned_ids}
             invalid = [cid for cid in card_ids if cid not in owned_set]
@@ -52,7 +65,7 @@ class Team(commands.Cog):
                     VALUES ($1, $2, $3, $4)
                 """, player_id, i + 1, card_id, i == 0)
 
-        await ctx.send(f"✅ Team updated. {len(card_ids)} card(s) assigned. Captain: `{card_ids[0]}`")
+        await ctx.send(f"✅ Team updated. {len(card_ids)} card(s) assigned. Captain: `{card_codes[0]}`")
 
     @commands.command(name="team")
     async def show_team(self, ctx, member: Optional[discord.Member] = None):
@@ -67,7 +80,7 @@ class Team(commands.Cog):
                 return
 
             team_rows = await conn.fetch("""
-                SELECT pt.slot, pt.is_captain, c.id AS card_id, c.character_name, c.form,
+                SELECT pt.slot, pt.is_captain, c.id AS card_id, c.character_name, c.form, c.code,
                        uc.xp, uc.health, uc.attack, uc.speed
                 FROM player_team pt
                 JOIN user_cards uc ON uc.card_id = pt.card_id AND uc.user_id = pt.user_id
@@ -96,7 +109,7 @@ class Team(commands.Cog):
             role = " (Captain)" if row["is_captain"] else ""
             embed.add_field(
                 name=f"{emoji} {row['character_name']}{role}",
-                value=f"ID: `{row['card_id']}` • Level: `{level}`",
+                value=f"Code: `{row['code']}` • Level: `{level}`",
                 inline=False
             )
 
