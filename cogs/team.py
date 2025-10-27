@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord.ui import View, Button
 from utils.db import db_transaction
-from cogs.entities import entity_from_db  # ✅ adapté à ton structure
+from cogs.entities import entity_from_db
 
 class TeamView(View):
     def __init__(self, entities: list, author: discord.User):
@@ -101,7 +101,8 @@ class Team(commands.Cog):
         if not rows:
             return await ctx.send("ℹ️ Your team is empty. Use `teamset` to define it.")
 
-        # Inject series into entity as description
+        # Convert records to dicts and inject series as description
+        rows = [dict(r) for r in rows]
         for row in rows:
             row["description"] = row.get("series") or "Unknown"
 
