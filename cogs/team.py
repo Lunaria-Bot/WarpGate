@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord.ui import View, Button
 from utils.db import db_transaction
-from entities import entity_from_db
+from cogs.entities import entity_from_db
 
 class TeamView(View):
     def __init__(self, entities: list, author: discord.User):
