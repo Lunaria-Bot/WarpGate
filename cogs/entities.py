@@ -30,7 +30,7 @@ class Stats:
 
 class Entity:
     def __init__(self, name: str, form: str = "base",
-                 image_url: str = None, description: str = None,
+                 image_url: str = None, series: str = None,
                  override_stats: dict = None, quantity: int = 1, xp: int = 0):
         base = FORM_BASE_STATS.get(form.lower(), FORM_BASE_STATS["base"])
         if override_stats:
@@ -40,7 +40,7 @@ class Entity:
         self.form = form
         self.stats = Stats(**base)
         self.image_url = image_url
-        self.description = description or ""
+        self.series = series or "Unknown"
         self.quantity = quantity
         self.xp = xp
         self.level = self.xp // 100 + 1
@@ -56,7 +56,7 @@ class Entity:
     def to_embed(self, title_prefix="✨ You drew:"):
         embed = discord.Embed(
             title=f"{title_prefix} {FORM_EMOJIS.get(self.form, '')} {self.name}",
-            description=self.description,
+            description=f"Series: *{self.series}*",
             color=FORM_COLORS.get(self.form, discord.Color.dark_gray())
         )
         embed.add_field(name="Form", value=self.form.capitalize(), inline=True)
@@ -72,7 +72,7 @@ class Entity:
             "name": self.name,
             "form": self.form,
             "image_url": self.image_url,
-            "description": self.description,
+            "series": self.series,
             "quantity": self.quantity,
             "xp": self.xp,
             "level": self.level,
@@ -111,7 +111,7 @@ def entity_from_db(card_row, user_card_row=None):
         name=card_row.get("character_name") or card_row.get("name"),
         form=card_row.get("form", "base"),
         image_url=card_row.get("image_url"),
-        description=card_row.get("description"),
+        series=card_row.get("series"),
         override_stats=override_stats if override_stats else None,
         quantity=quantity,
         xp=xp
