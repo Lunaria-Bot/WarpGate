@@ -90,7 +90,7 @@ class Team(commands.Cog):
             rows = await conn.fetch("""
                 SELECT pt.slot, pt.is_captain,
                        c.id AS card_id, c.character_name, c.form, c.image_url, c.series,
-                       uc.quantity, uc.xp, uc.health, uc.attack, uc.speed
+                       uc.xp, uc.health, uc.attack, uc.speed
                 FROM player_team pt
                 JOIN user_cards uc ON uc.card_id = pt.card_id AND uc.user_id = pt.user_id
                 JOIN cards c ON c.id = pt.card_id
@@ -101,7 +101,6 @@ class Team(commands.Cog):
         if not rows:
             return await ctx.send("ℹ️ Your team is empty. Use `teamset` to define it.")
 
-        # Convert records to dicts and inject series as description
         rows = [dict(r) for r in rows]
         for row in rows:
             row["description"] = row.get("series") or "Unknown"
