@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord.ui import View, Button
 from utils.db import db_transaction
-from cogs.entities import entity_from_db
+from cogs.entities import entity_from_db  # ✅ adapté à ton structure
 
 class TeamView(View):
     def __init__(self, entities: list, author: discord.User):
@@ -89,7 +89,7 @@ class Team(commands.Cog):
 
             rows = await conn.fetch("""
                 SELECT pt.slot, pt.is_captain,
-                       c.id AS card_id, c.character_name, c.form, c.image_url, c.description,
+                       c.id AS card_id, c.character_name, c.form, c.image_url, c.series,
                        uc.quantity, uc.xp, uc.health, uc.attack, uc.speed
                 FROM player_team pt
                 JOIN user_cards uc ON uc.card_id = pt.card_id AND uc.user_id = pt.user_id
@@ -100,6 +100,10 @@ class Team(commands.Cog):
 
         if not rows:
             return await ctx.send("ℹ️ Your team is empty. Use `teamset` to define it.")
+
+        # Inject series into entity as description
+        for row in rows:
+            row["description"] = row.get("series") or "Unknown"
 
         entities = [entity_from_db(card_row=row, user_card_row=row) for row in rows]
         view = TeamView(entities, ctx.author)
